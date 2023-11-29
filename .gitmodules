@@ -1,3 +1,0 @@
-[submodule "Modules/ClickupIntegration"]
-	path = Modules/ClickupIntegration
-	url = git@github.com:ztersinc/freescout-clickup-module.git
