@@ -259,7 +259,7 @@ class SendReplyToCustomer implements ShouldQueue
         if (!$new && !$is_forward) {
             $subject = 'Re: '.$subject;
         }
-        $subject = \Eventy::filter('email.reply_to_customer.subject', $subject, $this->conversation);
+        $subject = \Eventy::filter('email.reply_to_customer.subject', $subject, $this->conversation, $this->last_thread);
         $this->threads = \Eventy::filter('email.reply_to_customer.threads', $this->threads, $this->conversation, $mailbox);
 
         $headers['X-FreeScout-Mail-Type'] = 'customer.message';
@@ -317,7 +317,7 @@ class SendReplyToCustomer implements ShouldQueue
 
                 // If an email has not been sent after 1 hour - show an error message to support agent.
                 if ($this->attempts() >= 3 || $response_code >= 500) {
-                    $this->last_thread->send_status = SendLog::STATUS_SEND_ERROR;
+                    $this->last_thread->send_status = SendLog::STATUS_SEND_INTERMEDIATE_ERROR;
                     $this->last_thread->updateSendStatusData(['msg' => $error_message]);
                     $this->last_thread->save();
                 }
@@ -421,6 +421,9 @@ class SendReplyToCustomer implements ShouldQueue
                 }
 
                 try {
+                    // https://github.com/freescout-helpdesk/freescout/issues/3502
+                    $imap_sent_folder = mb_convert_encoding($imap_sent_folder, "UTF7-IMAP","UTF-8");
+
                     // https://github.com/Webklex/php-imap/issues/380
                     if (method_exists($client, 'getFolderByPath')) {
                         $folder = $client->getFolderByPath($imap_sent_folder);
@@ -431,28 +434,32 @@ class SendReplyToCustomer implements ShouldQueue
                     if ($folder) {
                         try {
                             $save_result = $this->saveEmailToFolder($client, $folder, $envelope, $parts, $bcc_array);
+
                             // Sometimes emails with attachments by some reason are not saved.
                             // https://github.com/freescout-helpdesk/freescout/issues/2749
                             if (!$save_result) {
                                 // Save without attachments.
-                                $this->saveEmailToFolder($client, $folder, $envelope, [$part_body], $bcc_array);
+                                $save_result = $this->saveEmailToFolder($client, $folder, $envelope, [$part_body], $bcc_array);
+                                if (!$save_result) {
+                                    \Log::error($this->getImapSaveErrorPrefix($mailbox).'Could not save outgoing reply to the IMAP folder (check folder name and make sure IMAP folder does not have spaces - folders with spaces do not work): '.$imap_sent_folder);
+                                }
                             }
                         } catch (\Exception $e) {
                             // Just log error and continue.
-                            \Helper::logException($e, 'Could not save outgoing reply to the IMAP folder: ');
+                            \Helper::logException($e, $this->getImapSaveErrorPrefix($mailbox).'Could not save outgoing reply to the IMAP folder: ');
                         }
                     } else {
-                        \Log::error('Could not save outgoing reply to the IMAP folder (make sure IMAP folder does not have spaces - folders with spaces do not work): '.$imap_sent_folder);
+                        \Log::error($this->getImapSaveErrorPrefix($mailbox).'Could not save outgoing reply to the IMAP folder (check folder name and make sure IMAP folder does not have spaces - folders with spaces do not work): '.$imap_sent_folder);
                     }
                 } catch (\Exception $e) {
                     // Just log error and continue.
-                    \Helper::logException($e, 'Could not save outgoing reply to the IMAP folder, IMAP folder not found: '.$imap_sent_folder.' - ');
+                    \Helper::logException($e, $this->getImapSaveErrorPrefix($mailbox).'Could not save outgoing reply to the IMAP folder, IMAP folder not found: '.$imap_sent_folder.' - ');
                     //$this->saveToSendLog('['.date('Y-m-d H:i:s').'] Could not save outgoing reply to the IMAP folder: '.$imap_sent_folder);
                 }
             } catch (\Exception $e) {
                 // Just log error and continue.
                 //$this->saveToSendLog('['.date('Y-m-d H:i:s').'] Could not get mailbox IMAP folder: '.$imap_sent_folder);
-                \Helper::logException($e, 'Could not save outgoing reply to the IMAP folder: '.$imap_sent_folder.' - ');
+                \Helper::logException($e, $this->getImapSaveErrorPrefix($mailbox).'Could not save outgoing reply to the IMAP folder: '.$imap_sent_folder.' - ');
             }
         }
 
@@ -466,6 +473,11 @@ class SendReplyToCustomer implements ShouldQueue
 
         // Save to send log
         $this->saveToSendLog('', $smtp_queue_id);
+    }
+
+    public function getImapSaveErrorPrefix($mailbox)
+    {
+        return '['.$mailbox->name.' » Connection Settings » Fetching Emails » IMAP Folder To Save Outgoing Replies] ';
     }
 
     // Save an email to IMAP folder.
@@ -485,7 +497,7 @@ class SendReplyToCustomer implements ShouldQueue
         }
 
         if (get_class($client) == 'Webklex\PHPIMAP\Client') {
-            return $folder->appendMessage($envelope_str, ['Seen'], now()->format('d-M-Y H:i:s O'));
+            return $folder->appendMessage($envelope_str, ['\Seen'], now()->format('d-M-Y H:i:s O'));
         } else {
             return $folder->appendMessage($envelope_str, '\Seen', now()->format('d-M-Y H:i:s O'));
         }
