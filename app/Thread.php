@@ -2,6 +2,7 @@
 
 namespace App;
 
+use App\SendLog;
 use App\Events\ConversationStatusChanged;
 use App\Events\ConversationUserChanged;
 use App\Events\UserAddedNote;
@@ -309,7 +310,7 @@ class Thread extends Model
         // Change "background:" to "background-color:".
         // https://github.com/freescout-helpdesk/freescout/issues/2560
         // Keep in mind that with large texts preg_replace() may return null.
-        $body = preg_replace("/(<[^<>]+style=[\"'][^\"']*)background: *([^;() ]+;)/", '$1background-color:$2', $body) ?: $body;
+        $body = preg_replace("/(<[^<>]+style=[\"'][^\"']*)background: *([^;() ]+[;\"'])/", '$1background-color:$2', $body) ?: $body;
 
         // Cut out "collapse" class as it hides elements.
         $body = preg_replace("/(<[^<>\r\n]+class=([\"'][^\"']* |[\"']))(collapse|hidden)([\"' ])/", '$1$4', $body) ?: $body;
@@ -1516,5 +1517,25 @@ class Thread extends Model
     {
         $threads = self::sortThreads($threads);
         return $threads->first();
+    }
+
+    public function canRetrySend()
+    {
+        if (!in_array($this->send_status, [SendLog::STATUS_SEND_ERROR, SendLog::STATUS_DELIVERY_ERROR])) {
+            return false;
+        }
+        // Check if failed_job still exists.
+        if (!$this->getFailedJobId()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function getFailedJobId()
+    {
+        return \App\FailedJob::where('queue', 'emails')
+            ->where('payload', 'like', '{"displayName":"App\\\\\\\\Jobs\\\\\\\\SendReplyToCustomer"%{i:0;i:'.$this->id.';%')
+            ->value('id');
     }
 }

@@ -18,7 +18,7 @@ return [
     | or any other location as required by the application or its packages.
     */
 
-    'version' => '1.8.100',
+    'version' => '1.8.110',
 
     /*
     |--------------------------------------------------------------------------
@@ -188,7 +188,7 @@ return [
     | Checks for new jobs every --sleep seconds.
     | If --tries is set and job fails it is being processed right away without any delay.
     | --delay parameter does not work to set delays between retry attempts.
-    | --timeout parameter sets job timeout and is used to avoid queue:work stucking.
+    | --timeout parameter sets job timeout and is used to avoid queue:work freezing.
     |
     | Jobs sending emails are retried manually in handle().
     | Number of retries is set in each job class.
@@ -264,9 +264,13 @@ return [
     |--------------------------------------------------------------------------
     | File types which should be viewed in the browser instead of downloading.
     | SVG images are not viewable to avid XSS.
+    | The list should be in sync with /storage/app/public/uploads/.htaccess and nginx config.
     |-------------------------------------------------------------------------
     */
-    'viewable_attachments'    => env('APP_VIEWABLE_ATTACHMENTS', ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'apng', 'bmp', 'gif', 'ico', 'cur', 'png', 'tif', 'tiff', 'webp', 'pdf', 'txt', 'diff', 'patch', 'json', 'mp3', 'wav', 'ogg', 'wma']),
+    'viewable_attachments'    => env('APP_VIEWABLE_ATTACHMENTS') 
+                                ? explode(',', env('APP_VIEWABLE_ATTACHMENTS'))
+                                : ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'apng', 'bmp', 'gif', 'ico', 'cur', 'png', 'tif', 'tiff', 'webp', 'pdf', 'txt', 'diff', 'patch', 'json', 'mp3', 'wav', 'ogg', 'wma'],
+
     // Additional restriction by mime type.
     // If HTML file is renamed into .txt for example it will be shown by the browser as HTML.
     // Regular expressions (#...#)
@@ -297,6 +301,14 @@ return [
     |-------------------------------------------------------------------------
     */
     'email_conv_history'    => env('APP_EMAIL_CONV_HISTORY', 'none'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Maximum size of the message which can be sent to the customer (MB).
+    |
+    |-------------------------------------------------------------------------
+    */
+    'max_message_size'    => env('APP_MAX_MESSAGE_SIZE', '20'),
 
     /*
     |--------------------------------------------------------------------------
@@ -442,6 +454,31 @@ return [
     |-------------------------------------------------------------------------
     */
     'show_only_assigned_conversations'    => env('APP_SHOW_ONLY_ASSIGNED_CONVERSATIONS', ''),
+
+    /*
+    |--------------------------------------------------------------------------
+    | By default X-Frame-Options header is enabled and set to SAMEORIGIN.
+    | Via this option you can disable it (APP_X_FRAME_OPTIONS=false) or set custom value:
+    | - DENY
+    | - ALLOW-FROM example.org
+    |-------------------------------------------------------------------------
+    */
+    'x_frame_options'    => env('APP_X_FRAME_OPTIONS', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Enable Content-Security-Policy meta tag to prevent possible XSS attacks.
+    |-------------------------------------------------------------------------
+    */
+    'csp_enabled'    => env('APP_CSP_ENABLED', true),
+    'csp_script_src' => env('APP_CSP_SCRIPT_SRC', ''),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Let the application know that CloudFlare is used (for proper client IP detection).
+    |-------------------------------------------------------------------------
+    */
+    'cloudflare_is_used'    => env('APP_CLOUDFLARE_IS_USED', false),
 
     /*
     |--------------------------------------------------------------------------

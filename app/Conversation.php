@@ -188,6 +188,11 @@ class Conversation extends Model
     const DEFAULT_LIST_SIZE = 50;
 
     /**
+     * Default size of the chats list.
+     */
+    const CHATS_LIST_SIZE = 50;
+
+    /**
      * Cache of the conversations starred by user.
      *
      * @var array
@@ -664,7 +669,7 @@ class Conversation extends Model
      *
      * @return Conversation
      */
-    public function getNearby($mode = 'closest', $folder_id = null)
+    public function getNearby($mode = 'closest', $folder_id = null, $status = null, $prev_if_no_next = false)
     {
         $conversation = null;
 
@@ -679,21 +684,29 @@ class Conversation extends Model
 
         $query = \Eventy::filter('conversation.get_nearby_query', $query, $this, $mode, $folder);
 
+        if ($status) {
+            $query->where('status', $status);
+        }
+
         $order_bys = $folder->getOrderByArray();
 
         // Next.
         if ($mode != 'prev') {
             // Try to get next conversation
-            $query_next = $query;
+            $query_next = clone $query;
             foreach ($order_bys as $order_by) {
                 foreach ($order_by as $field => $sort_order) {
                     if (!$this->$field) {
                         continue;
                     }
+                    $field_value = $this->$field;
+                    if ($field == 'status' && $status !== null) {
+                        $field_value = $status;
+                    }
                     if ($sort_order == 'asc') {
-                        $query_next->where($field, '>=', $this->$field);
+                        $query_next->where($field, '>=', $field_value);
                     } else {
-                        $query_next->where($field, '<=', $this->$field);
+                        $query_next->where($field, '<=', $field_value);
                     }
                     $query_next->orderBy($field, $sort_order);
                 }
@@ -701,7 +714,8 @@ class Conversation extends Model
             $conversation = $query_next->first();
         }
 
-        if ($conversation || $mode == 'next') {
+        // https://github.com/freescout-helpdesk/freescout/issues/3486
+        if ($conversation || ($mode == 'next' && !$prev_if_no_next)) {
             return $conversation;
         }
 
@@ -712,10 +726,14 @@ class Conversation extends Model
                 if (!$this->$field) {
                     continue;
                 }
+                $field_value = $this->$field;
+                if ($field == 'status' && $status !== null) {
+                    $field_value = $status;
+                }
                 if ($sort_order == 'asc') {
-                    $query_prev->where($field, '<=', $this->$field);
+                    $query_prev->where($field, '<=', $field_value);
                 } else {
-                    $query_prev->where($field, '>=', $this->$field);
+                    $query_prev->where($field, '>=', $field_value);
                 }
                 $query_prev->orderBy($field, $sort_order == 'asc' ? 'desc' : 'asc');
             }
@@ -727,9 +745,9 @@ class Conversation extends Model
     /**
      * Get URL of the next conversation.
      */
-    public function urlNext($folder_id = null)
+    public function urlNext($folder_id = null, $status = null, $prev_if_no_next = false)
     {
-        $next_conversation = $this->getNearby('next', $folder_id);
+        $next_conversation = $this->getNearby('next', $folder_id, $status, $prev_if_no_next);
         if ($next_conversation) {
             $url = $next_conversation->url();
         } else {
@@ -2145,6 +2163,7 @@ class Conversation extends Model
     {
         \App\Events\RealtimeConvNewThread::dispatchSelf($thread);
         \App\Events\RealtimeMailboxNewThread::dispatchSelf($conversation->mailbox_id);
+        \App\Events\RealtimeChat::dispatchSelf($conversation->mailbox_id);
     }
 
     public static function getConvTableSorting($request = null)
@@ -2377,5 +2396,29 @@ class Conversation extends Model
             $thread->conversation->setPreview($thread->body);
             $thread->conversation->save();
         }
+    }
+
+    public function isInChatMode()
+    {
+        return $this->isChat() && \Helper::isChatMode() && \Route::is('conversations.view');
+    }
+
+    public static function getChats($mailbox_id, $offset = 0, $limit = self::CHATS_LIST_SIZE+1)
+    {
+        $chats = Conversation::where('type', self::TYPE_CHAT)
+            ->where('mailbox_id', $mailbox_id)
+            ->where('state', self::STATE_PUBLISHED)
+            ->whereIn('status', [self::STATUS_ACTIVE, self::STATUS_PENDING])
+            ->orderBy('last_reply_at', 'desc')
+            ->offset($offset)
+            ->limit($limit)
+            ->get();
+
+        // Preload customers.
+        if (count($chats)) {
+            self::loadCustomers($chats);
+        }
+
+        return $chats;
     }
 }

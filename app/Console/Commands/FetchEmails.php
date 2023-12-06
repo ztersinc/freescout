@@ -561,10 +561,18 @@ class FetchEmails extends Command
             }
 
             // Make sure that prev_thread belongs to the current mailbox.
-            // It may happen when forwarding conversation for example.
-            if ($prev_thread) {
+            // Problems may arise when forwarding conversation for example.
+            //
+            // For replies to email notifications it's allowed to have prev_thread in
+            // another mailbox as conversation can be moved.
+            // https://github.com/freescout-helpdesk/freescout/issues/3455
+            if ($prev_thread && $message_from_customer) {
                 if ($prev_thread->conversation->mailbox_id != $mailbox->id) {
                     // https://github.com/freescout-helpdesk/freescout/issues/2807
+                    // Behaviour of email sent to multiple mailboxes:
+                    // If a user from either mailbox replies, then a new conversation is created
+                    // in the other mailbox with another new conversation ID.
+                    // 
                     // Try to get thread by generated message ID.
                     if ($in_reply_to) {
                         $prev_thread = Thread::where('message_id', \MailHelper::generateMessageId($in_reply_to, $mailbox->id.$in_reply_to))->first();
@@ -694,38 +702,41 @@ class FetchEmails extends Command
             $new_thread = null;
             if ($message_from_customer) {
 
-                if (!$data['prev_thread']) {
-                    // Maybe this email need to be imported also into other mailbox.
+                // We should import the message into other mailboxes even if previous thread is set.
+                // https://github.com/freescout-helpdesk/freescout/issues/3473
+                //if (!$data['prev_thread']) {
+                
+                // Maybe this email need to be imported also into other mailbox.
 
-                    $recipient_emails = array_unique($this->formatEmailList(array_merge(
-                        $this->attrToArray($message->getTo()), 
-                        $this->attrToArray($message->getCc()), 
-                        // It will always return an empty value as it's Bcc.
-                        $this->attrToArray($message->getBcc())
-                    )));
-                    
-                    if (count($mailboxes) && count($recipient_emails) > 1) {
-                        foreach ($mailboxes as $check_mailbox) {
-                            if ($check_mailbox->id == $mailbox->id) {
-                                continue;
-                            }
-                            if (!$check_mailbox->isInActive()) {
-                                continue;
-                            }
-                            foreach ($recipient_emails as $recipient_email) {
-                                // No need to check mailbox aliases.
-                                if (\App\Email::sanitizeEmail($check_mailbox->email) == $recipient_email) {
-                                    $this->extra_import[] = [
-                                        'mailbox'    => $check_mailbox,
-                                        'message'    => $message,
-                                        'message_id' => $message_id,
-                                    ];
-                                    break;
-                                }
+                $recipient_emails = array_unique($this->formatEmailList(array_merge(
+                    $this->attrToArray($message->getTo()), 
+                    $this->attrToArray($message->getCc()), 
+                    // It will always return an empty value as it's Bcc.
+                    $this->attrToArray($message->getBcc())
+                )));
+                
+                if (count($mailboxes) && count($recipient_emails) > 1) {
+                    foreach ($mailboxes as $check_mailbox) {
+                        if ($check_mailbox->id == $mailbox->id) {
+                            continue;
+                        }
+                        if (!$check_mailbox->isInActive()) {
+                            continue;
+                        }
+                        foreach ($recipient_emails as $recipient_email) {
+                            // No need to check mailbox aliases.
+                            if (\App\Email::sanitizeEmail($check_mailbox->email) == $recipient_email) {
+                                $this->extra_import[] = [
+                                    'mailbox'    => $check_mailbox,
+                                    'message'    => $message,
+                                    'message_id' => $message_id,
+                                ];
+                                break;
                             }
                         }
                     }
                 }
+                //}
 
                 if (\Eventy::filter('fetch_emails.should_save_thread', true, $data) !== false) {
                     // SendAutoReply listener will check bounce flag and will not send an auto reply if this is an auto responder.
@@ -744,6 +755,15 @@ class FetchEmails extends Command
 
                     // Send "Unable to process your update email" to user
                     \App\Jobs\SendEmailReplyError::dispatch($from, $user, $mailbox)->onQueue('emails');
+
+                    return;
+                }
+
+                // Save user thread only if there prev_thread is set.
+                // https://github.com/freescout-helpdesk/freescout/issues/3455
+                if (!$prev_thread) {
+                    $this->logError("Support agent's reply to the email notification could not be processed as previous thread could not be determined.");
+                    $this->setSeen($message, $mailbox);
 
                     return;
                 }
@@ -918,9 +938,11 @@ class FetchEmails extends Command
             $conversation->created_at = $now;
         }
 
+        $prev_has_attachments = $conversation->has_attachments;
         // Update has_attachments only if email has attachments AND conversation hasn't has_attachments already set
         // Prevent to set has_attachments value back to 0 if the new reply doesn't have any attachment
         if (!$conversation->has_attachments && count($attachments)) {
+            // Later we will check which attachments are embedded.
             $conversation->has_attachments = true;
         }
 
@@ -980,13 +1002,23 @@ class FetchEmails extends Command
             throw $e;
         }
 
+        $body_changed = false;
         $saved_attachments = $this->saveAttachments($attachments, $thread->id);
         if ($saved_attachments) {
             $thread->has_attachments = true;
 
             // After attachments saved to the disk we can replace cids in body (for PLAIN and HTML body)
-            $thread->body = $this->replaceCidsWithAttachmentUrls($thread->body, $saved_attachments);
+            $thread->body = $this->replaceCidsWithAttachmentUrls($thread->body, $saved_attachments, $conversation, $prev_has_attachments);
+            $body_changed = true;
+        }
 
+        $new_body = Thread::replaceBase64ImagesWithAttachments($thread->body);
+        if ($new_body != $thread->body) {
+            $thread->body = $new_body;
+            $body_changed = true;
+        }
+
+        if ($body_changed) {
             $thread->save();
         }
 
@@ -1053,6 +1085,12 @@ class FetchEmails extends Command
                 break;
         }
 
+        $prev_has_attachments = $conversation->has_attachments;
+        if (!$conversation->has_attachments && count($attachments)) {
+            // Later we will check which attachments are embedded.
+            $conversation->has_attachments = true;
+        }
+
         // Save extra recipients to CC
         $conv_cc = $conversation->getCcArray();
         $conversation->setCc(array_merge($cc, $to));
@@ -1102,13 +1140,23 @@ class FetchEmails extends Command
         $thread->updated_at = $now;
         $thread->save();
 
+        $body_changed = false;
         $saved_attachments = $this->saveAttachments($attachments, $thread->id);
         if ($saved_attachments) {
             $thread->has_attachments = true;
 
             // After attachments saved to the disk we can replace cids in body (for PLAIN and HTML body)
-            $thread->body = $this->replaceCidsWithAttachmentUrls($thread->body, $saved_attachments);
+            $thread->body = $this->replaceCidsWithAttachmentUrls($thread->body, $saved_attachments, $conversation, $prev_has_attachments);
+            $body_changed = true;
+        }
 
+        $new_body = Thread::replaceBase64ImagesWithAttachments($thread->body);
+        if ($new_body != $thread->body) {
+            $thread->body = $new_body;
+            $body_changed = true;
+        }
+
+        if ($body_changed) {
             $thread->save();
         }
 
@@ -1135,8 +1183,8 @@ class FetchEmails extends Command
                 $email_attachment->getMimeType(),
                 Attachment::typeNameToInt($email_attachment->getType()),
                 $email_attachment->getContent(),
-                '',
-                false,
+                $uploaded_file = '',
+                $embedded = false,
                 $thread_id
             );
             if ($created_attachment) {
@@ -1256,8 +1304,10 @@ class FetchEmails extends Command
         return $result;
     }
 
-    public function replaceCidsWithAttachmentUrls($body, $attachments)
+    public function replaceCidsWithAttachmentUrls($body, $attachments, $conversation, $prev_has_attachments)
     {
+        $only_embedded_attachments = true;
+
         foreach ($attachments as $attachment) {
             // webklex:
             // [type] => image
@@ -1286,8 +1336,27 @@ class FetchEmails extends Command
             // [img_src] =>
             // [size] => 2326
             if ($attachment['imap_attachment']->id && (isset($attachment['imap_attachment']->img_src) || strlen($attachment['imap_attachment']->content ?? ''))) {
-                $body = str_replace('cid:'.$attachment['imap_attachment']->id, $attachment['attachment']->url(), $body);
+                $cid = 'cid:'.$attachment['imap_attachment']->id;
+                if (strstr($body, $cid)) {
+                    $body = str_replace($cid, $attachment['attachment']->url(), $body);
+                    // Set embedded flag for the attachment.
+                    $attachment['attachment']->embedded = true;
+                    $attachment['attachment']->save();
+                } else {
+                    $only_embedded_attachments = false;
+                }
+            } else {
+                $only_embedded_attachments = false;
             }
+        }
+
+        if ($only_embedded_attachments 
+            && $conversation 
+            && $conversation->has_attachments
+            && !$prev_has_attachments
+        ) {
+            $conversation->has_attachments = false;
+            $conversation->save();
         }
 
         return $body;

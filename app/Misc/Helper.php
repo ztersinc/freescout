@@ -9,6 +9,7 @@ namespace App\Misc;
 use Carbon\Carbon;
 use App\Option;
 use App\User;
+use App\CustomerChannel;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Console\Output\BufferedOutput;
 
@@ -38,6 +39,8 @@ class Helper
      * Permissions for directories.
      */
     const DIR_PERMISSIONS = 0755;
+
+    public static $csp_nonce = null;
 
     /**
      * Stores list of global entities (for caching).
@@ -746,9 +749,9 @@ class Helper
         return 'Error: '.$e->getMessage().'; File: '.$e->getFile().' ('.$e->getLine().')';
     }
 
-    public static function denyAccess()
+    public static function denyAccess($msg = '')
     {
-        abort(403, 'This action is unauthorized.');
+        abort(403, $msg ?: 'This action is unauthorized.');
     }
 
     /**
@@ -1346,16 +1349,28 @@ class Helper
         foreach ((array)$protocols as $protocol) {
             switch ($protocol) {
                 case 'http':
-                case 'https':   $value = preg_replace_callback('~(?:(https?)://([^\s<]+)|(www\.[^\s<]+?\.[^\s<]+))(?<![\.,:])~i', function ($match) use ($protocol, &$links, $attr) { if ($match[1]) $protocol = $match[1]; $link = $match[2] ?: $match[3]; return '<' . array_push($links, "<a $attr href=\"$protocol://$link\">$protocol://$link</a>") . '>'; }, $value) ?: $value;
+                case 'https':
+                    //$value = preg_replace_callback('~(?:(https?)://([^\s<]+)|(www\.[^\s<]+?\.[^\s<]+))(?<![\.,:])~i', function ($match) use ($protocol, &$links, $attr) { 
+                    //$value = preg_replace_callback('%(\b(([\w-]+)://?|www[.])[^\s()<>]+(?:\([\w\d]+\)|([^[:punct:]\s]|/)))%s', function ($match) use ($protocol, &$links, $attr) { 
+                    // https://github.com/freescout-helpdesk/freescout/issues/3402
+                    $value = preg_replace_callback('%([>\r\n\s:; ]|^)((([\w-]+)://?|www[.])[^\s()<>]+(?:\([\w\d]+\)|([^[:punct:]\s]|/)))%s', function ($match) use ($protocol, &$links, $attr) { 
+                            if ($match[4]) {
+                                $protocol = $match[4];
+                            }
+                            $link = $match[2];
+                            $link = substr($link, strlen($match[3]));
+                            //return '<' . array_push($links, "<a $attr href=\"$protocol://$link\">$protocol://$link</a>") . '>';
+                            return $match[1].'<' . array_push($links, "<a $attr href=\"$protocol://$link\">".$match[2]."</a>") . '>';
+                    }, $value) ?: $value;
                     break;
-                case 'mail':    $value = preg_replace_callback('~([^\s<>]+?@[^\s<]+?\.[^\s<]+)(?<![\.,:])~', function ($match) use (&$links, $attr) { return '<' . array_push($links, "<a $attr href=\"mailto:{$match[1]}\">{$match[1]}</a>") . '>'; }, $value) ?: $value;
+                case 'mail':    $value = preg_replace_callback('~([^\s<>]+?@[^\s<]+?\.[^\s<]+)(?<![\.,:\)])~', function ($match) use (&$links, $attr) { return '<' . array_push($links, "<a $attr href=\"mailto:{$match[1]}\">{$match[1]}</a>") . '>'; }, $value) ?: $value;
                     break;
                 default:        $value = preg_replace_callback('~' . preg_quote($protocol, '~') . '://([^\s<]+?)(?<![\.,:])~i', function ($match) use ($protocol, &$links, $attr) { return '<' . array_push($links, "<a $attr href=\"$protocol://{$match[1]}\">$protocol://{$match[1]}</a>") . '>'; }, $value) ?: $value;
                     break;
             }
         }
 
-        // Insert all link
+        // Insert all links
         return preg_replace_callback('/<(\d+)>/', function ($match) use (&$links) { return $links[$match[1] - 1]; }, $value ?? '') ?: $value;
     }
 
@@ -1523,6 +1538,14 @@ class Helper
     public static function sqlLikeOperator()
     {
         return self::isPgSql() ? 'ilike' : 'like';
+    }
+
+    // PostgreSQL truncates string if it contains \u0000 symbol starting from this symbol.
+    // https://stackoverflow.com/questions/31671634/handling-unicode-sequences-in-postgresql
+    // https://github.com/freescout-helpdesk/freescout/issues/3485
+    public static function sqlSanitizeString($string)
+    {
+        return str_replace(json_decode('"\u0000"'), "", $string);
     }
 
     public static function humanFileSize($size, $unit="")
@@ -1753,7 +1776,33 @@ class Helper
 
     public static function isHttps($url = '')
     {
-        return self::getProtocol($url) == 'https';
+        if (\Helper::isInstaller()) {
+            // In the Installer we determine HTTPS from URL.
+            return self::isCurrentUrlHttps();
+        } else {
+            return self::getProtocol($url) == 'https';
+        }
+    }
+
+    public static function isInstaller()
+    {
+        $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+        $request_uri = preg_replace("#\?.*#", '', $request_uri);
+
+        return strstr($request_uri, '/install/') || preg_match("#/install$#", $request_uri);
+    }
+
+    public static function isCurrentUrlHttps()
+    {
+        if (in_array(strtolower($_SERVER['X_FORWARDED_PROTO'] ?? ''), array('https', 'on', 'ssl', '1'), true)
+            || strtolower($_SERVER['HTTPS'] ?? '') == 'on' 
+            || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') == 'https'
+            || ($_SERVER['HTTP_CF_VISITOR'] ?? '') == '{"scheme":"https"}'
+        ) {
+            return true;
+        } else {
+            return false;
+        }
     }
 
     public static function fixProtocol($url)
@@ -1885,6 +1934,7 @@ class Helper
             'proc_open (PHP)'  => function_exists('proc_open'),
             'fpassthru (PHP)'  => function_exists('fpassthru'),
             'symlink (PHP)'    => function_exists('symlink'),
+            'pcntl_signal (console PHP)'    => (int)shell_exec('php -r "echo (int)function_exists(\'pcntl_signal\');"'),
             'ps (shell)' => function_exists('shell_exec') ? shell_exec('ps') : false,
         ];
     }
@@ -1996,5 +2046,55 @@ class Helper
         ];
 
         return array_merge($default_params, $params);
+    }
+
+    public static function cspNonce()
+    {
+        if (self::$csp_nonce === null) {
+            self::$csp_nonce = \Str::random(25);
+        }
+
+        return self::$csp_nonce;
+    }
+
+    public static function cspMetaTag()
+    {
+        if (!config('app.csp_enabled')) {
+            return '';
+        }
+
+        $nonce = \Helper::cspNonce();
+
+        return "<meta http-equiv=\"Content-Security-Policy\" content=\"script-src 'self' 'nonce-".$nonce."' "
+            .config('app.csp_script_src').' '.\Eventy::filter('csp.script_src', '')."\">";
+        //<meta property=\"csp-nonce\" id=\"csp-nonce\" content=\"".$nonce."\">";
+    }
+
+    public static function cspNonceAttr()
+    {
+        if (!config('app.csp_enabled')) {
+            return '';
+        }
+
+        return ' nonce="'.\Helper::cspNonce().'"';
+    }
+
+    public static function isChatModeAvailable()
+    {
+        return count(CustomerChannel::getChannels());
+    }
+
+    public static function isChatMode()
+    {
+        return (int)\Session::get('chat_mode', 0);
+    }
+
+    public static function setChatMode($is_on)
+    {
+        if ((int)$is_on) {
+            \Session::put('chat_mode', 1);
+        } else {
+            \Session::forget('chat_mode');
+        }
     }
 }
