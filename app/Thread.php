@@ -315,6 +315,14 @@ class Thread extends Model
         // Cut out "collapse" class as it hides elements.
         $body = preg_replace("/(<[^<>\r\n]+class=([\"'][^\"']* |[\"']))(collapse|hidden)([\"' ])/", '$1$4', $body) ?: $body;
 
+        // Remove only the <!--[if !mso]><!--> and <!--<![endif]--> around the elements.
+        // https://github.com/freescout-helpdesk/freescout/pull/3865#issuecomment-1990758149
+        $body = preg_replace('/<!\-\-\[if [^>]+\]><!\-\->(.*?)<![ ]+\-\-<!\[endif\]\-\->/s', '$1', $body);
+
+        // https://github.com/freescout-helpdesk/freescout/issues/3894
+        // Remove <!--[if !mso]><!--> and <!--<![endif]--> comments, preserving the data inside
+        //$body = preg_replace('/(<!\-\-\[if [^>]+\]>|<!\[endif\]\-\->)/', '', $body);
+
         return \Helper::purifyHtml($body);
     }
 
@@ -564,7 +572,12 @@ class Thread extends Model
                 return \App\User::getDeletedUser();
             }
         } else {
-            return $this->created_by_customer;
+            // In some cases the created_by_customer can be empty.
+            if ($this->created_by_customer) {
+                return $this->created_by_customer;
+            } else {
+                return \App\Customer::getDummyCustomer();
+            }
         }
     }
 
@@ -872,6 +885,9 @@ class Thread extends Model
                 $send_status_data = array_merge($send_status_data, $new_data);
             } else {
                 $send_status_data = $new_data;
+            }
+            if (!empty($send_status_data['msg'])) {
+                $send_status_data['msg'] = \MailHelper::sanitizeSmtpStatusMessage($send_status_data['msg']);
             }
             $this->send_status_data = \Helper::jsonEncodeUtf8($send_status_data);
         } else {
@@ -1393,6 +1409,12 @@ class Thread extends Model
     {
         $message = \MailHelper::fetchMessage($this->conversation->mailbox, $this->message_id, $this->getMailDate());
 
+        // Try without limiting by date.
+        // https://github.com/freescout-helpdesk/freescout/issues/3658
+        if (!$message) {
+            $message = \MailHelper::fetchMessage($this->conversation->mailbox, $this->message_id);
+        }
+
         if (!$message) {
             return '';
         }
@@ -1521,7 +1543,7 @@ class Thread extends Model
 
     public function canRetrySend()
     {
-        if (!in_array($this->send_status, [SendLog::STATUS_SEND_ERROR, SendLog::STATUS_DELIVERY_ERROR])) {
+        if ($this->isSendStatusSuccess()) {
             return false;
         }
         // Check if failed_job still exists.
@@ -1530,6 +1552,20 @@ class Thread extends Model
         }
 
         return true;
+    }
+
+    public function isSendStatusSuccess()
+    {
+        // We have not tried to send the email yet.
+        if ((int)$this->send_status == 0) {
+            return false;
+        }
+
+        if (!in_array($this->send_status, [SendLog::STATUS_SEND_ERROR, SendLog::STATUS_DELIVERY_ERROR, SendLog::STATUS_SEND_INTERMEDIATE_ERROR])) {
+            return true;
+        }
+        
+        return false;
     }
 
     public function getFailedJobId()

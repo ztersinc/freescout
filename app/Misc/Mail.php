@@ -15,6 +15,7 @@ class Mail
      */
     const REPLY_SEPARATOR_HTML = 'fsReplyAbove';
     const REPLY_SEPARATOR_TEXT = '-- Please reply above this line --';
+    const REPLY_SEPARATOR_NOTIFICATION = 'fsNotifReplyAbove';
 
     /**
      * Message-ID prefixes for outgoing emails.
@@ -281,14 +282,29 @@ class Mail
         return Option::get('mail_driver', 'mail');
     }
 
+    public static function registerSmtpLogger()
+    {
+        $logger = new \Swift_Plugins_Loggers_ArrayLogger();
+        \Mail::getSwiftMailer()->registerPlugin(new \Swift_Plugins_LoggerPlugin($logger));
+
+        return $logger;
+    }
+
     /**
      * Send test email from mailbox.
      */
     public static function sendTestMail($to, $mailbox = null)
     {
+        $result = [
+            'status' => 'success',
+            'msg' => '',
+            'log' => '',
+        ];
+
         if ($mailbox) {
             // Configure mail driver according to Mailbox settings
             \MailHelper::setMailDriver($mailbox);
+            $smtp_logger = self::registerSmtpLogger();
 
             $status_message = '';
 
@@ -301,6 +317,7 @@ class Mail
         } else {
             // System email
             \MailHelper::setSystemMailDriver();
+            $smtp_logger = self::registerSmtpLogger();
 
             $status_message = '';
 
@@ -316,15 +333,17 @@ class Mail
         if (\Mail::failures() || $status_message) {
             SendLog::log(null, null, $to, SendLog::MAIL_TYPE_TEST, SendLog::STATUS_SEND_ERROR, null, null, $status_message);
             if ($status_message) {
-                throw new \Exception($status_message, 1);
-            } else {
-                return false;
+                $result['msg'] = $status_message;
             }
+            $result['status'] = 'error';
+            $result['log'] = $smtp_logger->dump();
         } else {
             SendLog::log(null, null, $to, SendLog::MAIL_TYPE_TEST, SendLog::STATUS_ACCEPTED);
 
-            return true;
+            $result['status'] = 'success';
         }
+
+        return $result;
     }
 
     /**
@@ -714,6 +733,11 @@ class Mail
         foreach ($imap_folders as $folder_name) {
             try {
                 $folder = self::getImapFolder($client, $folder_name);
+
+                if (!$folder) {
+                    \Log::error('('.$mailbox->name.') Show Original - folder not found: '.$folder_name);
+                    continue;
+                }
                 // Message-ID: <123@123.com>
                 $query = $folder->query()
                     ->text('<'.$message_id.'>')
@@ -744,7 +768,7 @@ class Mail
                     $query = $folder->query()->text('<'.$message_id.'>')->leaveUnread()->limit(1)->setCharset(null);
                     if ($message_date) {
                        $query->since($message_date->subDays(7));
-                       $query->before($message_date->addDays(7));
+                       $query->before($message_date->addDays(14));
                     }
                     $messages = $query->get();
                     $no_charset = true;
@@ -1017,6 +1041,24 @@ class Mail
         return preg_match_all("/=\?[^\?]+\?[BQ]\?/i", $subject_decoded)
             || !mb_check_encoding($subject_decoded, 'UTF-8')
             || \Str::contains($subject_decoded, $invalid_utf_symbols);
+    }
+
+    public static function getHashedReplySeparator($message_id) {
+        $separator = \MailHelper::REPLY_SEPARATOR_HTML;
+
+        if ($message_id) {
+            $separator .= substr(md5($message_id.config('app.key')), 0, 8);
+        }
+
+        return $separator;
+    }
+
+    // Sanitize status message - remove SMTP username and password.
+    public static function sanitizeSmtpStatusMessage($status_message) {
+        $status_message = preg_replace('#(username ")[^"]+(")#', '$1***$2', $status_message ?? '');
+        $status_message = preg_replace("#(Swift_Transport_Esmtp_Auth_LoginAuthenticator\->authenticate\(Object\(Swift_SmtpTransport\), ')[^\']+(', ')[^\']+('\))#", '$1***$2***$3', $status_message ?? '');
+
+        return $status_message;
     }
 
     // public static function oauthGetProvider($provider_code, $params)

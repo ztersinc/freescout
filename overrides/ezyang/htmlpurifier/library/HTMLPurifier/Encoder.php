@@ -138,7 +138,7 @@ class HTMLPurifier_Encoder
         // need to do PHP stuff. 99% of the time, this will be the case.
         if (preg_match(
             '/^[\x{9}\x{A}\x{D}\x{20}-\x{7E}\x{A0}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]*$/Du',
-            $str
+            $str ?? ''
         )) {
             return $str;
         }

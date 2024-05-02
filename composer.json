@@ -95,6 +95,7 @@
             "Modules\\": "Modules/",
             "Axn\\Laroute\\Routes\\": "overrides/axn/laravel-laroute/src/Routes/",
             "Webklex\\IMAP\\": "overrides/webklex/laravel-imap/src/IMAP/",
+            "Webklex\\IMAP\\Providers\\": "overrides/webklex/laravel-imap/src/IMAP/Providers/",
             "Webklex\\PHPIMAP\\": "overrides/webklex/php-imap/src/",
             "RachidLaasri\\LaravelInstaller\\Helpers\\": "overrides/rachidlaasri/laravel-installer/src/Helpers/",
             "RachidLaasri\\LaravelInstaller\\Middleware\\": "overrides/rachidlaasri/laravel-installer/src/Middleware/",
@@ -124,6 +125,7 @@
             "Symfony\\Component\\HttpFoundation\\File\\MimeType\\": "overrides/symfony/http-foundation/File/MimeType/",
             "Chumper\\Zipper\\Repositories\\": "overrides/chumper/zipper/src/Chumper/Zipper/Repositories/",
             "Faker\\Provider\\": "overrides/fzaninotto/faker/src/Faker/Provider/",
+            "Illuminate\\Database\\": "overrides/laravel/framework/src/Illuminate/Database/",
 
             "Illuminate\\Support\\": "overrides/laravel/framework/src/Illuminate/Support/",
             "Illuminate\\Http\\": "overrides/laravel/framework/src/Illuminate/Http/",
@@ -171,6 +173,7 @@
         },
         "exclude-from-classmap": [
             "vendor/axn/laravel-laroute/src/Routes/Collection.php",
+            "vendor/webklex/laravel-imap/src/IMAP/Providers/LaravelServiceProvider.php",
             "vendor/webklex/laravel-imap/src/IMAP/Message.php",
             "vendor/webklex/laravel-imap/src/IMAP/Attachment.php",
             "vendor/webklex/laravel-imap/src/IMAP/Client.php",
@@ -219,6 +222,7 @@
             "vendor/chumper/zipper/src/Chumper/Zipper/Repositories/ZipRepository.php",
             "vendor/fzaninotto/faker/src/Faker/Provider/Base.php",
             "vendor/ezyang/htmlpurifier/library/HTMLPurifier/AttrDef/URI/Host.php",
+            "vendor/laravel/framework/src/Illuminate/Database/DetectsLostConnections.php",
 
             "vendor/laravel/framework/src/Illuminate/Support/Collection.php",
             "vendor/laravel/framework/src/Illuminate/Http/Request.php",
@@ -298,6 +302,10 @@
             "vendor/ezyang/htmlpurifier/library/HTMLPurifier/AttrTransform/NameSync.php",
             "vendor/ezyang/htmlpurifier/library/HTMLPurifier/AttrValidator.php",
             "vendor/ezyang/htmlpurifier/library/HTMLPurifier/ChildDef/List.php",
+            "vendor/ezyang/htmlpurifier/library/HTMLPurifier/Length.php",
+            "vendor/ezyang/htmlpurifier/library/HTMLPurifier/Encoder.php",
+            "vendor/ezyang/htmlpurifier/library/HTMLPurifier/Lexer.php",
+            "vendor/ezyang/htmlpurifier/library/HTMLPurifier/Lexer/DOMLex.php",
             "vendor/javoscript/laravel-macroable-models/src/MacroableModels.php",
             "vendor/swiftmailer/swiftmailer/lib/classes/Swift/EmbeddedFile.php",
             "vendor/swiftmailer/swiftmailer/lib/classes/Swift/Transport/StreamBuffer.php",
@@ -306,6 +314,7 @@
             "vendor/webklex/php-imap/src/Structure.php",
             "vendor/webklex/php-imap/src/Message.php",
             "vendor/webklex/php-imap/src/Attachment.php",
+            "vendor/webklex/php-imap/src/Part.php",
             "vendor/webklex/php-imap/src/Connection/Protocols/ImapProtocol.php"
         ]
     },

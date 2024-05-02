@@ -43,6 +43,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'W' => 
         array (
             'Webklex\\PHPIMAP\\' => 16,
+            'Webklex\\IMAP\\Providers\\' => 23,
             'Webklex\\IMAP\\' => 13,
             'Watson\\Rememberable\\' => 20,
         ),
@@ -151,6 +152,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
             'Illuminate\\Filesystem\\' => 22,
             'Illuminate\\Database\\Eloquent\\Concerns\\' => 38,
             'Illuminate\\Database\\Eloquent\\' => 29,
+            'Illuminate\\Database\\' => 20,
             'Illuminate\\Cookie\\Middleware\\' => 29,
             'Illuminate\\Cookie\\' => 18,
             'Illuminate\\Container\\' => 21,
@@ -234,6 +236,10 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         array (
             0 => __DIR__ . '/../..' . '/overrides/webklex/php-imap/src',
             1 => __DIR__ . '/..' . '/webklex/php-imap/src',
+        ),
+        'Webklex\\IMAP\\Providers\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/overrides/webklex/laravel-imap/src/IMAP/Providers',
         ),
         'Webklex\\IMAP\\' => 
         array (
@@ -560,6 +566,10 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         array (
             0 => __DIR__ . '/../..' . '/overrides/laravel/framework/src/Illuminate/Database/Eloquent',
         ),
+        'Illuminate\\Database\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/overrides/laravel/framework/src/Illuminate/Database',
+        ),
         'Illuminate\\Cookie\\Middleware\\' => 
         array (
             0 => __DIR__ . '/../..' . '/overrides/laravel/framework/src/Illuminate/Cookie/Middleware',
@@ -832,6 +842,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'App\\Events\\CustomerCreatedConversation' => __DIR__ . '/../..' . '/app/Events/CustomerCreatedConversation.php',
         'App\\Events\\CustomerReplied' => __DIR__ . '/../..' . '/app/Events/CustomerReplied.php',
         'App\\Events\\RealtimeBroadcastNotificationCreated' => __DIR__ . '/../..' . '/app/Events/RealtimeBroadcastNotificationCreated.php',
+        'App\\Events\\RealtimeChat' => __DIR__ . '/../..' . '/app/Events/RealtimeChat.php',
         'App\\Events\\RealtimeConvNewThread' => __DIR__ . '/../..' . '/app/Events/RealtimeConvNewThread.php',
         'App\\Events\\RealtimeConvView' => __DIR__ . '/../..' . '/app/Events/RealtimeConvView.php',
         'App\\Events\\RealtimeConvViewFinish' => __DIR__ . '/../..' . '/app/Events/RealtimeConvViewFinish.php',
@@ -865,6 +876,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'App\\Http\\Middleware\\CheckRole' => __DIR__ . '/../..' . '/app/Http/Middleware/CheckRole.php',
         'App\\Http\\Middleware\\CustomHandle' => __DIR__ . '/../..' . '/app/Http/Middleware/CustomHandle.php',
         'App\\Http\\Middleware\\EncryptCookies' => __DIR__ . '/../..' . '/app/Http/Middleware/EncryptCookies.php',
+        'App\\Http\\Middleware\\FrameGuard' => __DIR__ . '/../..' . '/app/Http/Middleware/FrameGuard.php',
         'App\\Http\\Middleware\\HttpsRedirect' => __DIR__ . '/../..' . '/app/Http/Middleware/HttpsRedirect.php',
         'App\\Http\\Middleware\\Localize' => __DIR__ . '/../..' . '/app/Http/Middleware/Localize.php',
         'App\\Http\\Middleware\\LogoutIfDeleted' => __DIR__ . '/../..' . '/app/Http/Middleware/LogoutIfDeleted.php',
@@ -1678,7 +1690,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'HTMLPurifier_Doctype' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Doctype.php',
         'HTMLPurifier_DoctypeRegistry' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/DoctypeRegistry.php',
         'HTMLPurifier_ElementDef' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/ElementDef.php',
-        'HTMLPurifier_Encoder' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Encoder.php',
+        'HTMLPurifier_Encoder' => __DIR__ . '/../..' . '/overrides/ezyang/htmlpurifier/library/HTMLPurifier/Encoder.php',
         'HTMLPurifier_EntityLookup' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/EntityLookup.php',
         'HTMLPurifier_EntityParser' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/EntityParser.php',
         'HTMLPurifier_ErrorCollector' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/ErrorCollector.php',
@@ -1737,9 +1749,9 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'HTMLPurifier_Injector_SafeObject' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Injector/SafeObject.php',
         'HTMLPurifier_Language' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Language.php',
         'HTMLPurifier_LanguageFactory' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/LanguageFactory.php',
-        'HTMLPurifier_Length' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Length.php',
+        'HTMLPurifier_Length' => __DIR__ . '/../..' . '/overrides/ezyang/htmlpurifier/library/HTMLPurifier/Length.php',
         'HTMLPurifier_Lexer' => __DIR__ . '/../..' . '/overrides/ezyang/htmlpurifier/library/HTMLPurifier/Lexer.php',
-        'HTMLPurifier_Lexer_DOMLex' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Lexer/DOMLex.php',
+        'HTMLPurifier_Lexer_DOMLex' => __DIR__ . '/../..' . '/overrides/ezyang/htmlpurifier/library/HTMLPurifier/Lexer/DOMLex.php',
         'HTMLPurifier_Lexer_DirectLex' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Lexer/DirectLex.php',
         'HTMLPurifier_Lexer_PH5P' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Lexer/PH5P.php',
         'HTMLPurifier_Node' => __DIR__ . '/..' . '/ezyang/htmlpurifier/library/HTMLPurifier/Node.php',
@@ -2034,7 +2046,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'Illuminate\\Database\\DatabaseManager' => __DIR__ . '/..' . '/laravel/framework/src/Illuminate/Database/DatabaseManager.php',
         'Illuminate\\Database\\DatabaseServiceProvider' => __DIR__ . '/..' . '/laravel/framework/src/Illuminate/Database/DatabaseServiceProvider.php',
         'Illuminate\\Database\\DetectsDeadlocks' => __DIR__ . '/..' . '/laravel/framework/src/Illuminate/Database/DetectsDeadlocks.php',
-        'Illuminate\\Database\\DetectsLostConnections' => __DIR__ . '/..' . '/laravel/framework/src/Illuminate/Database/DetectsLostConnections.php',
+        'Illuminate\\Database\\DetectsLostConnections' => __DIR__ . '/../..' . '/overrides/laravel/framework/src/Illuminate/Database/DetectsLostConnections.php',
         'Illuminate\\Database\\Eloquent\\Builder' => __DIR__ . '/..' . '/laravel/framework/src/Illuminate/Database/Eloquent/Builder.php',
         'Illuminate\\Database\\Eloquent\\Collection' => __DIR__ . '/..' . '/laravel/framework/src/Illuminate/Database/Eloquent/Collection.php',
         'Illuminate\\Database\\Eloquent\\Concerns\\GuardsAttributes' => __DIR__ . '/../..' . '/overrides/laravel/framework/src/Illuminate/Database/Eloquent/Concerns/GuardsAttributes.php',
@@ -3971,7 +3983,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'Webklex\\IMAP\\Facades\\Client' => __DIR__ . '/..' . '/webklex/laravel-imap/src/IMAP/Facades/Client.php',
         'Webklex\\IMAP\\Folder' => __DIR__ . '/..' . '/webklex/laravel-imap/src/IMAP/Folder.php',
         'Webklex\\IMAP\\Message' => __DIR__ . '/../..' . '/overrides/webklex/laravel-imap/src/IMAP/Message.php',
-        'Webklex\\IMAP\\Providers\\LaravelServiceProvider' => __DIR__ . '/..' . '/webklex/laravel-imap/src/IMAP/Providers/LaravelServiceProvider.php',
+        'Webklex\\IMAP\\Providers\\LaravelServiceProvider' => __DIR__ . '/../..' . '/overrides/webklex/laravel-imap/src/IMAP/Providers/LaravelServiceProvider.php',
         'Webklex\\IMAP\\Query\\Query' => __DIR__ . '/..' . '/webklex/laravel-imap/src/IMAP/Query/Query.php',
         'Webklex\\IMAP\\Query\\WhereQuery' => __DIR__ . '/..' . '/webklex/laravel-imap/src/IMAP/Query/WhereQuery.php',
         'Webklex\\IMAP\\Support\\AttachmentCollection' => __DIR__ . '/..' . '/webklex/laravel-imap/src/IMAP/Support/AttachmentCollection.php',
@@ -4022,7 +4034,7 @@ class ComposerStaticInitbf8dc242a640d7c740f283f226d0bdb4
         'Webklex\\PHPIMAP\\Header' => __DIR__ . '/../..' . '/overrides/webklex/php-imap/src/Header.php',
         'Webklex\\PHPIMAP\\IMAP' => __DIR__ . '/..' . '/webklex/php-imap/src/IMAP.php',
         'Webklex\\PHPIMAP\\Message' => __DIR__ . '/../..' . '/overrides/webklex/php-imap/src/Message.php',
-        'Webklex\\PHPIMAP\\Part' => __DIR__ . '/..' . '/webklex/php-imap/src/Part.php',
+        'Webklex\\PHPIMAP\\Part' => __DIR__ . '/../..' . '/overrides/webklex/php-imap/src/Part.php',
         'Webklex\\PHPIMAP\\Query\\Query' => __DIR__ . '/..' . '/webklex/php-imap/src/Query/Query.php',
         'Webklex\\PHPIMAP\\Query\\WhereQuery' => __DIR__ . '/..' . '/webklex/php-imap/src/Query/WhereQuery.php',
         'Webklex\\PHPIMAP\\Structure' => __DIR__ . '/../..' . '/overrides/webklex/php-imap/src/Structure.php',

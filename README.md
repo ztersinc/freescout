@@ -36,9 +36,11 @@ If you want to support the project feel free to **star this repository**. It hel
 
   * No limitations on the number of users, tickets, mailboxes, etc.
   * 100% Mobile-friendly.
-  * Multilingual: English, Chinese, Croatian, Czech, Danish, Dutch, Finnish, French, German, Italian, Japanese, Korean, Norwegian, Persian, Polish, Portuguese, Russian, Spanish, Slovak, Swedish.
+  * Multilingual: English, Chinese, Croatian, Czech, Danish, Dutch, Finnish, French, German, Italian, Japanese, Korean, Norwegian, Persian, Polish, Portuguese, Russian, Spanish, Slovak, Swedish, Turkish.
   * Seamless email integration.
   * Supports modern Microsoft Exchange authentication.
+  * Fully supports screen readers (for visually impaired).
+  * Built with strong focus on [security](https://freescout.net/security).
   * Web installer & updater.
   * Starred conversations.
   * Forwarding conversations.
@@ -72,7 +74,7 @@ Mobile apps support the same functionality and modules as the web version of you
 FreeScout is a pure PHP/MySQL application, so it can be easily deployed even on a shared hosting.
 
   * Nginx / Apache / IIS
-  * PHP 7.1 - 8.2
+  * PHP 7.1 - 8.x
   * MySQL 5.0+ / MariaDB 5.0+ / PostgreSQL
 
 There is no minimum system requirements (CPU / RAM) – FreeScout will run on any system.
