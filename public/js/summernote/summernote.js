@@ -158,8 +158,8 @@ var dialog = renderer.create('<div class="modal" aria-hidden="false" tabindex="-
 });
 var popover = renderer.create([
     '<div class="note-popover popover in">',
-    '  <div class="arrow"/>',
-    '  <div class="popover-content note-children-container"/>',
+    '  <div class="arrow"></div>',
+    '  <div class="popover-content note-children-container"></div>',
     '</div>'
 ].join(''), function ($node, options) {
     var direction = typeof options.direction !== 'undefined' ? options.direction : 'bottom';
@@ -4939,7 +4939,7 @@ var Handle = /** @class */ (function () {
 }());
 
 var defaultScheme = 'http://';
-var linkPattern = /^([A-Za-z][A-Za-z0-9+-.]*\:[\/\/]?|mailto:[A-Z0-9._%+-]+@)?(www\.)?(.+)$/i;
+var linkPattern = /^([A-Za-z][A-Za-z0-9+-.]*\:[\/]{2}|mailto:[A-Z0-9._%+-]+@)?(www\.)?(.+)$/i;
 var AutoLink = /** @class */ (function () {
     function AutoLink(context) {
         var _this = this;

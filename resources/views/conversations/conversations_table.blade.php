@@ -1,9 +1,20 @@
-@if (count($conversations))
+@if (count($conversations) || (isset($params) && !empty($params['user_id'])))
     @php
+        if (is_array($conversations)) {
+            $conversations = collect($conversations);
+        }
         if (empty($folder)) {
             // Create dummy folder
             $folder = new App\Folder();
             $folder->type = App\Folder::TYPE_ASSIGNED;
+        }
+        // Clean filter.
+        if (!empty($conversations_filter)) {
+            foreach ($conversations_filter as $i => $filter_value) {
+                if (is_array($filter_value)) {
+                    unset($conversations_filter[$i]);
+                }
+            }
         }
 
         // Preload users and customers
@@ -20,6 +31,14 @@
 
         if (!isset($params)) {
             $params = [];
+        }
+
+        // For customer profile.
+        if (!empty($params['no_customer'])) {
+            $no_customer = true;
+        }
+        if (!empty($params['no_checkboxes'])) {
+            $no_checkboxes = true;
         }
 
         // Sorting.
@@ -45,9 +64,9 @@
         $col_counter = 6;
     @endphp
 
-    @if (!request()->get('page'))
+    {{--@if (!request()->get('page'))--}}
         @include('/conversations/partials/bulk_actions')
-    @endif
+    {{--@endif--}}
 
     <table class="table-conversations table @if (!empty($params['show_mailbox']))show-mailbox @endif" data-page="{{ (int)request()->get('page', 1) }}" @foreach ($params as $param_name => $param_value) data-param_{{ $param_name }}="{{ $param_value }}" @endforeach @if (!empty($conversations_filter)) @foreach ($conversations_filter as $filter_field => $filter_value) data-filter_{{ $filter_field }}="{{ $filter_value }}" @endforeach @endif @foreach ($sorting as $sorting_name => $sorting_value) data-sorting_{{ $sorting_name }}="{{ $sorting_value }}" @endforeach >
         <colgroup>
@@ -83,8 +102,9 @@
                 </span>
             </th>
             @if ($show_assigned)
-                <th class="conv-owner">
-                    <span>{{ __("Assigned To") }}</span>
+                <th class="conv-owner fs-trigger-modal @if (!empty($params['user_id'])) filtered @endif" data-remote="{{ route('conversations.ajax_html', ['action' =>
+                        'assignee_filter', 'mailbox_id' => (\Helper::isRoute('mailboxes.view.folder') ? $folder->mailbox_id : ''), 'user_id' => ($params['user_id'] ?? '')]) }}" data-trigger="modal" data-modal-title="{{ __("Assigned To") }}" data-modal-no-footer="true" data-modal-on-show="initConvAssigneeFilter">
+                    <span>{{ __("Assigned To") }}<small class="glyphicon glyphicon-filter"></small></span>
                 </th>
                 {{--<th class="conv-owner dropdown">
                     <span {{--data-target="#"- -}} class="dropdown-toggle" data-toggle="dropdown">{{ __("Assigned To") }}</span>
@@ -106,7 +126,7 @@
             <th class="conv-date">
                 <span>
                     <span class="conv-col-sort" data-sort-by="date" data-order="@if ($sorting['sort_by'] == 'date'){{ $sorting['order'] }}@else{{ 'asc' }}@endif">
-                        @if ($folder->type == App\Folder::TYPE_CLOSED){{ __("Closed") }}@elseif ($folder->type == App\Folder::TYPE_DRAFTS){{ __("Last Updated") }}@elseif ($folder->type == App\Folder::TYPE_DELETED){{ __("Deleted") }}@else{{ \Eventy::filter('conversations_table.column_title_date', __("Waiting Since"), $folder) }}@endif @if ($sorting['sort_by'] == 'date' && $sorting['order'] == 'desc')↑@elseif ($sorting['sort_by'] == 'date' && $sorting['order'] == 'asc')↓@elseif ($sorting['sort_by'] == '' && $sorting['order'] =='')↓@endif
+                        @if ($folder->type == App\Folder::TYPE_CLOSED)@php $column_title_date = __("Closed"); @endphp@elseif ($folder->type == App\Folder::TYPE_DRAFTS)@php $column_title_date = __("Last Updated"); @endphp@elseif ($folder->type == App\Folder::TYPE_DELETED)@php $column_title_date = __("Deleted"); @endphp@else@php $column_title_date = \Eventy::filter('conversations_table.column_title_date', __("Waiting Since"), $folder) @endphp@endif{{ $column_title_date }} @if ($sorting['sort_by'] == 'date' && $sorting['order'] == 'desc')↑@elseif ($sorting['sort_by'] == 'date' && $sorting['order'] == 'asc')↓@elseif ($sorting['sort_by'] == '' && $sorting['order'] =='')↓@endif
                     </a>
                 </span>
             </th>
@@ -164,6 +184,9 @@
                                 @if ($conversation->isPhone())
                                     <i class="glyphicon glyphicon-earphone"></i>
                                 @endif
+                                @if ($conversation->isCustom())
+                                    <i class="glyphicon glyphicon-comment"></i>
+                                @endif
                                 @include('conversations/partials/badges'){{ '' }}@if ($conversation->isChat() && $conversation->getChannelName())<span class="fs-tag pull-left"><span class="fs-tag-name"><small class="glyphicon glyphicon-phone"></small> {{ $conversation->getChannelName() }}</span></span>@endif{{ '' }}@action('conversations_table.before_subject', $conversation){{ $conversation->getSubject() }}@action('conversations_table.after_subject', $conversation)
                             </p>
                             <p class="conv-preview">@action('conversations_table.preview_prepend', $conversation)@if (!empty($params['show_mailbox']))[{{ $conversation->mailbox_cached->name }}]<br/>@endif{{ '' }}@if ($conversation->preview){{ $conversation->preview }}@else&nbsp;@endif</p>
@@ -184,34 +207,36 @@
                         <a href="{{ $conversation->url() }}" title="{{ __('View conversation') }}" @if (!empty($params['target_blank'])) target="_blank" @endif><i>#</i>{{ $conversation->number }}</a>
                     </td>
                     <td class="conv-date">
-                        <a href="{{ $conversation->url() }}" @if (!in_array($folder->type, [App\Folder::TYPE_CLOSED, App\Folder::TYPE_DRAFTS, App\Folder::TYPE_DELETED])) data-toggle="tooltip" data-html="true" data-placement="left" title="{{ $conversation->getDateTitle() }}"@else title="{{ __('View conversation') }}" @endif @if (!empty($params['target_blank'])) target="_blank" @endif>{{ $conversation->getWaitingSince($folder) }}</a>
+                        @php $conv_waiting_since = $conversation->getWaitingSince($folder); @endphp<a href="{{ $conversation->url() }}" @if (!in_array($folder->type, [App\Folder::TYPE_CLOSED, App\Folder::TYPE_DRAFTS, App\Folder::TYPE_DELETED]))@php $conv_date_title = $conversation->getDateTitle(); @endphp aria-label="{{ $conv_waiting_since }}" aria-description="{{ $conv_date_title }}" data-toggle="tooltip" data-html="true" data-placement="left" title="{{ $conv_date_title }}"@else title="{{ __('View conversation') }}" @endif @if (!empty($params['target_blank'])) target="_blank" @endif>{{ $conv_waiting_since }}</a>
                     </td>
                 </tr>
                 @action('conversations_table.after_row', $conversation, $columns, $col_counter)
             @endforeach
         </tbody>
-        <tfoot>
-            <tr>
-                <td class="conv-totals" colspan="{{ $col_counter-3 }}">
-                    @if ($conversations->total())
-                        {!! __(':count conversations', ['count' => '<strong>'.$conversations->total().'</strong>']) !!}&nbsp;|&nbsp; 
-                    @endif
-                    @if (isset($folder->active_count) && !$folder->isIndirect())
-                        <strong>{{ $folder->getActiveCount() }}</strong> {{ __('active') }}&nbsp;|&nbsp; 
-                    @endif
-                    @if ($conversations)
-                        <strong>{{ $conversations->firstItem() }}</strong>-<strong>{{ $conversations->lastItem() }}</strong>
-                    @endif
-                </td>
-                <td colspan="3" class="conv-nav">
-                    <div class="table-pager">
-                        @if ($conversations)
-                            {{ $conversations->links('conversations/conversations_pagination') }}
+        @if (count($conversations))
+            <tfoot>
+                <tr>
+                    <td class="conv-totals" colspan="{{ $col_counter-3 }}">
+                        @if ($conversations->total())
+                            {!! __(':count conversations', ['count' => '<strong>'.$conversations->total().'</strong>']) !!}&nbsp;|&nbsp; 
                         @endif
-                    </div>
-                </td>
-            </tr>
-        </tfoot>
+                        @if (isset($folder->active_count) && !$folder->isIndirect())
+                            <strong>{{ $folder->getActiveCount() }}</strong> {{ __('active') }}&nbsp;|&nbsp; 
+                        @endif
+                        @if ($conversations)
+                            <strong>{{ $conversations->firstItem() }}</strong>-<strong>{{ $conversations->lastItem() }}</strong>
+                        @endif
+                    </td>
+                    <td colspan="3" class="conv-nav">
+                        <div class="table-pager">
+                            @if ($conversations)
+                                {{ $conversations->links('conversations/conversations_pagination') }}
+                            @endif
+                        </div>
+                    </td>
+                </tr>
+            </tfoot>
+        @endif
     </table>
 @else
     @include('partials/empty', ['empty_text' => __('There are no conversations here')])
