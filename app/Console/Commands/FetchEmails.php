@@ -31,7 +31,7 @@ class FetchEmails extends Command
      *
      * @var string
      */
-    protected $signature = 'freescout:fetch-emails {--days=3} {--unseen=1} {--identifier=dummy}';
+    protected $signature = 'freescout:fetch-emails {--days=3} {--unseen=1} {--identifier=dummy} {--mailboxes=0}';
 
     /**
      * The console command description.
@@ -82,8 +82,6 @@ class FetchEmails extends Command
 
         $this->line('['.date('Y-m-d H:i:s').'] Fetching '.($this->option('unseen') ? 'UNREAD' : 'ALL').' emails for the last '.$this->option('days').' days.');
 
-        $this->extra_import = [];
-
         if (Mailbox::getInProtocols() === Mailbox::$in_protocols) {
             $this->mailboxes = Mailbox::get();
         } else {
@@ -97,8 +95,22 @@ class FetchEmails extends Command
         // Microseconds: 1 second = 1 000 000 microseconds.
         $sleep = 20000;
 
+        // Fetches specific mailboxes only, in case the corresponding id is greater than zero.
+        $mailboxIds = array_filter(
+            array_map(
+                'intval',
+                explode(',', $this->option('mailboxes'))
+            ),
+            function ($mailboxId) {
+                return $mailboxId > 0;
+            }
+        );
+
         foreach ($this->mailboxes as $mailbox) {
             if (!$mailbox->isInActive()) {
+                continue;
+            }
+            if ($mailboxIds !== [] && !in_array($mailbox->id, $mailboxIds, true)) {
                 continue;
             }
 
@@ -110,7 +122,8 @@ class FetchEmails extends Command
             $this->info('['.date('Y-m-d H:i:s').'] Mailbox: '.$mailbox->name);
 
             $this->mailbox = $mailbox;
-
+            $this->extra_import = [];
+            
             try {
                 $this->fetch($mailbox);
             } catch (\Exception $e) {
@@ -118,16 +131,16 @@ class FetchEmails extends Command
                 $this->logError('Error: '.$e->getMessage().'; File: '.$e->getFile().' ('.$e->getLine().')').')';
             }
 
-            usleep($sleep);
-        }
-
-        // Import emails sent to several mailboxes at once.
-        if (count($this->extra_import)) {
-            $this->line('['.date('Y-m-d H:i:s').'] Importing emails sent to several mailboxes at once: '.count($this->extra_import));
-            foreach ($this->extra_import as $i => $extra_import) {
-                $this->line('['.date('Y-m-d H:i:s').'] '.($i+1).') '.$extra_import['message']->getSubject());
-                $this->processMessage($extra_import['message'], $extra_import['message_id'], $extra_import['mailbox'], [], true);
+            // Import emails sent to several mailboxes at once.
+            if (count($this->extra_import)) {
+                $this->line('['.date('Y-m-d H:i:s').'] Importing emails sent to several mailboxes at once: '.count($this->extra_import));
+                foreach ($this->extra_import as $i => $extra_import) {
+                    $this->line('['.date('Y-m-d H:i:s').'] '.($i+1).') '.$extra_import['message']->getSubject());
+                    $this->processMessage($extra_import['message'], $extra_import['message_id'], $extra_import['mailbox'], [], true);
+                }
             }
+
+            usleep($sleep);
         }
 
         if ($successfully && count($this->mailboxes)) {
@@ -166,11 +179,13 @@ class FetchEmails extends Command
                 $folder = \MailHelper::getImapFolder($client, $folder_name);
             } catch (\Exception $e) {
                 // Just log error and continue.
-                $this->error('['.date('Y-m-d H:i:s').'] Could not get mailbox IMAP folder: '.$folder_name);
+                $this->error('['.date('Y-m-d H:i:s').'] IMAP folder not found on the mail server: '.$folder_name);
             }
 
             if ($folder) {
                 $folders[] = $folder;
+            } else {
+                $this->line('['.date('Y-m-d H:i:s').'] IMAP folder not found on the mail server: '.$folder_name);
             }
         }
         // try {
@@ -185,7 +200,7 @@ class FetchEmails extends Command
         }
 
         foreach ($folders as $folder) {
-            $this->line('['.date('Y-m-d H:i:s').'] Folder: '.$folder->name);
+            $this->line('['.date('Y-m-d H:i:s').'] Folder: '.($folder->full_name ?? $folder->name));
 
             // Requesting emails by bunches allows to fetch large amounts of emails
             // without problems with memory.
@@ -593,12 +608,18 @@ class FetchEmails extends Command
                 // Get body and do not replace :cid with images base64
                 $html_body = $message->getHTMLBody(false);
             }
+            
+            $is_html = true;
+
             if ($html_body) {
-                $body = $this->separateReply($html_body, true, $is_reply);
+                $body = $html_body;
             } else {
-                $body = $message->getTextBody();
-                $body = $this->separateReply($body, false, $is_reply);
+                $is_html = false;
+                $body = $message->getTextBody() ?? '';
+                $body = htmlspecialchars($body);
             }
+            $body = $this->separateReply($body, $is_html, $is_reply, !$message_from_customer, (($message_from_customer && $prev_thread) ? $prev_thread->getMessageId($mailbox) : ''));
+
             // We have to fetch absolutely all emails, even with empty body.
             // if (!$body) {
             //     $this->logError('Message body is empty');
@@ -902,6 +923,7 @@ class FetchEmails extends Command
             $now = date('Y-m-d H:i:s');
         }
         $conv_cc = $cc;
+        $prev_conv_cc = $conv_cc;
 
         // Customers are created before with email and name
         $customer = Customer::create($from);
@@ -911,6 +933,7 @@ class FetchEmails extends Command
             // If reply came from another customer: change customer, add original as CC.
             // If FreeScout will not change the customer, the reply will be shown 
             // as coming from the original customer (not the real sender) and cause confusion.
+            // Below after events are fired we roll customer back.
             if ($conversation->customer_id != $customer->id) {
                 $prev_customer_id = $conversation->customer_id;
                 $prev_customer_email = $conversation->customer_email;
@@ -1005,11 +1028,17 @@ class FetchEmails extends Command
         $body_changed = false;
         $saved_attachments = $this->saveAttachments($attachments, $thread->id);
         if ($saved_attachments) {
-            $thread->has_attachments = true;
 
             // After attachments saved to the disk we can replace cids in body (for PLAIN and HTML body)
             $thread->body = $this->replaceCidsWithAttachmentUrls($thread->body, $saved_attachments, $conversation, $prev_has_attachments);
             $body_changed = true;
+            
+            foreach ($saved_attachments as $saved_attachment) {
+                if (!$saved_attachment['attachment']->embedded) {
+                    $thread->has_attachments = true;
+                    break;
+                }
+            }
         }
 
         $new_body = Thread::replaceBase64ImagesWithAttachments($thread->body);
@@ -1043,8 +1072,16 @@ class FetchEmails extends Command
         }
 
         // Conversation customer changed
+        // if ($prev_customer_id) {
+        //     event(new ConversationCustomerChanged($conversation, $prev_customer_id, $prev_customer_email, null, $customer));
+        // }
+
+        // Return original customer back.
         if ($prev_customer_id) {
-            event(new ConversationCustomerChanged($conversation, $prev_customer_id, $prev_customer_email, null, $customer));
+            $conversation->customer_id = $prev_customer_id;
+            $conversation->customer_email = $prev_customer_email;
+            $conversation->setCc(array_merge($prev_conv_cc, array_diff($to, $mailbox->getEmails())));
+            $conversation->save();
         }
 
         return $thread;
@@ -1143,11 +1180,16 @@ class FetchEmails extends Command
         $body_changed = false;
         $saved_attachments = $this->saveAttachments($attachments, $thread->id);
         if ($saved_attachments) {
-            $thread->has_attachments = true;
-
             // After attachments saved to the disk we can replace cids in body (for PLAIN and HTML body)
             $thread->body = $this->replaceCidsWithAttachmentUrls($thread->body, $saved_attachments, $conversation, $prev_has_attachments);
             $body_changed = true;
+
+            foreach ($saved_attachments as $saved_attachment) {
+                if (!$saved_attachment['attachment']->embedded) {
+                    $thread->has_attachments = true;
+                    break;
+                }
+            }
         }
 
         $new_body = Thread::replaceBase64ImagesWithAttachments($thread->body);
@@ -1220,7 +1262,7 @@ class FetchEmails extends Command
      *
      * @return string
      */
-    public function separateReply($body, $is_html, $is_reply)
+    public function separateReply($body, $is_html, $is_reply, $user_reply_to_notification = false, $prev_message_id = '')
     {
         $cmp_reply_length_desc = function ($a, $b) {
             if (mb_strlen($a) == mb_strlen($b)) {
@@ -1270,10 +1312,29 @@ class FetchEmails extends Command
         if ($is_reply) {
             // Check all separators and choose the shortest reply
             $reply_bodies = [];
+
             $reply_separators = Mail::$alternative_reply_separators;
 
             if (!empty($this->mailbox->before_reply)) {
                 $reply_separators[] = $this->mailbox->before_reply;
+            }
+
+            // If user replied to the email notification use only predefined reply separator.
+            // https://github.com/freescout-helpdesk/freescout/issues/3580
+            if ($user_reply_to_notification && strstr($result, \MailHelper::REPLY_SEPARATOR_NOTIFICATION)) {
+                $reply_separators = [\MailHelper::REPLY_SEPARATOR_NOTIFICATION];
+            }
+
+            // Try to separate customer reply using hashed reply separator.
+            // In this case some extra text may appear below customer's reply:
+            //     On Thu, Jan 4, 2024 at 8:41 AM John Doe | Demo <test@example.org> wrote:
+            if (config('app.alternative_reply_separation')) {
+                if (!$user_reply_to_notification && $prev_message_id) {
+                    $hashed_reply_separator = \MailHelper::getHashedReplySeparator($prev_message_id);
+                    if (strstr($result, $hashed_reply_separator)) {
+                        $reply_separators = [$hashed_reply_separator];
+                    }
+                }
             }
 
             foreach ($reply_separators as $reply_separator) {
@@ -1284,7 +1345,7 @@ class FetchEmails extends Command
                     $parts = explode($reply_separator, $result);
                 }
                 if (count($parts) > 1) {
-                    // Check if past contains any real text.
+                    // Check if part contains any real text.
                     $text = \Helper::htmlToText($parts[0]);
                     $text = trim($text);
                     $text = preg_replace('/^\s+/mu', '', $text);

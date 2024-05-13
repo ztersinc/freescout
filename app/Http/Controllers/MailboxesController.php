@@ -182,7 +182,7 @@ class MailboxesController extends Controller
             $validator = Validator::make($request->all(), [
                 'name'             => 'required|string|max:40',
                 'email'            => 'required|string|email|max:128|unique:mailboxes,email,'.$id,
-                'aliases'          => 'nullable|string|max:255',
+                'aliases'          => 'nullable|string',
                 'from_name'        => 'required|integer',
                 'from_name_custom' => 'nullable|string|max:128',
                 'ticket_status'    => 'required|integer',
@@ -220,6 +220,7 @@ class MailboxesController extends Controller
         \Eventy::action('mailbox.settings_before_save', $mailbox, $request);
 
         $mailbox->fill($request->all());
+        $mailbox->signature = \Helper::stripDangerousTags($mailbox->signature);
 
         $mailbox->save();
 
@@ -561,6 +562,7 @@ class MailboxesController extends Controller
         }
 
         $mailbox->fill($request->all());
+        $mailbox->auto_reply_message = \Helper::stripDangerousTags($mailbox->auto_reply_message);
 
         $mailbox->save();
 
@@ -622,17 +624,22 @@ class MailboxesController extends Controller
                 }
 
                 if (!$response['msg']) {
-                    $test_result = false;
+                    $test_result = [
+                        'status' => 'error'
+                    ];
 
                     try {
-                        $test_result = \App\Misc\Mail::sendTestMail($request->to, $mailbox);
+                        $test_result = \MailHelper::sendTestMail($request->to, $mailbox);
                     } catch (\Exception $e) {
-                        $response['msg'] = $e->getMessage();
+                        $test_result['msg'] = $e->getMessage();
                     }
 
-                    if (!$test_result && !$response['msg']) {
-                        $response['msg'] = __('Error occurred sending email. Please check your mail server logs for more details.');
+                    if ($test_result['status'] == 'error') {
+                        $response['msg'] = $test_result['msg']
+                            ?: __('Error occurred sending email. Please check your mail server logs for more details.');
                     }
+
+                    $response['log'] = $test_result['log'] ?? '';
                 }
 
                 if (!$response['msg']) {
@@ -706,28 +713,33 @@ class MailboxesController extends Controller
 
                         $imap_folders = $client->getFolders();
 
+                        $response['folders'] = [];
+
                         if (count($imap_folders)) {
-                            foreach ($imap_folders as $imap_folder) {
-                                if (!empty($imap_folder->name)) {
-                                    $response['folders'][] = $imap_folder->name;
-                                }
-                                // Maybe we need a recursion here.
-                                if (!empty($imap_folder->children)) {
-                                    foreach ($imap_folder->children as $child_imap_folder) {
-                                        // Old library.
-                                        if (!empty($child_imap_folder->fullName)) {
-                                            $response['folders'][] = $child_imap_folder->fullName;
-                                        }
-                                        // New library.
-                                        if (!empty($child_imap_folder->full_name)) {
-                                            $response['folders'][] = $child_imap_folder->full_name;
-                                        }
-                                    }
-                                }
-                            }
+                            $response = $this->interateFolders($response, $imap_folders);
+                            $response['folders'] = array_unique($response['folders']);
                         }
 
                         if (count($response['folders'])) {
+
+                            // https://github.com/freescout-helpdesk/freescout/issues/3933
+                            // Exclude duplicate INBOX.Name and Name folders.
+                            // $folder_excluded = false;
+                            // foreach ($response['folders'] as $i => $folder_name) {
+                            //     if (\Str::startsWith($folder_name, 'INBOX.')) {
+                            //         foreach ($response['folders'] as $folder_name2) {
+                            //             if ($folder_name != $folder_name2 && $folder_name == 'INBOX.'.$folder_name2) {
+                            //                 unset($response['folders'][$i]);
+                            //                 $folder_excluded = true;
+                            //                 continue 2;
+                            //             }
+                            //         }
+                            //     }
+                            // }
+                            // if ($folder_excluded) {
+                            //     $response['folders'] = array_values($response['folders']);
+                            // }
+
                             $response['msg_success'] = __('IMAP folders retrieved: '.implode(', ', $response['folders']));
                         } else {
                             $response['msg_success'] = __('Connected, but no IMAP folders found');
@@ -811,6 +823,30 @@ class MailboxesController extends Controller
         }
 
         return \Response::json($response);
+    }
+
+    // Recursively interate over folders.
+    public function interateFolders($response, $imap_folders, $subfolder = false) {
+        foreach ($imap_folders as $imap_folder) {
+            if (!empty($imap_folder->name) && !$subfolder) {
+                $response['folders'][] = $imap_folder->name;
+            }
+
+            // Check for children and recurse.
+            if (!empty($imap_folder->children)) {
+                $response = $this->interateFolders($response, $imap_folder->children, true);
+            }
+
+            // Old library.
+            if (!empty($imap_folder->fullName)) {
+                $response['folders'][] = $imap_folder->fullName;
+            } elseif (!empty($imap_folder->full_name)) {
+                // New library.
+                $response['folders'][] = $imap_folder->full_name;
+            }
+        }
+
+        return $response;
     }
 
     public function oauth(Request $request)

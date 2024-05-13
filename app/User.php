@@ -306,6 +306,7 @@ class User extends Authenticatable
 
         return $settings;
     }
+
     /**
      * Get IDs of mailboxes to which user has access.
      */
@@ -1225,5 +1226,10 @@ class User extends Authenticatable
     public function setJobTitleAttribute($job_title)
     {
         $this->attributes['job_title'] = mb_substr($job_title ?? '', 0, 100);
+    }
+
+    public function canSeeOnlyAssignedConversations()
+    {
+        return $this->hasManageMailboxPermission(0, Mailbox::ACCESS_PERM_ASSIGNED);
     }
 }

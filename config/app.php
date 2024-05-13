@@ -18,7 +18,7 @@ return [
     | or any other location as required by the application or its packages.
     */
 
-    'version' => '1.8.110',
+    'version' => '1.8.139',
 
     /*
     |--------------------------------------------------------------------------
@@ -98,7 +98,7 @@ return [
     */
 
     'locale'          => env('APP_LOCALE', 'en'),
-    'locales'         => ['en', 'zh-CN', 'hr', 'cs', 'da', 'nl', 'fi', 'fr', 'de', 'it', 'ja', 'ko', 'no', 'fa', 'pl', 'pt-PT', 'pt-BR', 'ru', 'es', 'sk', 'sv'],
+    'locales'         => ['en', 'zh-CN', 'hr', 'cs', 'da', 'nl', 'fi', 'fr', 'de', 'it', 'ja', 'ko', 'no', 'fa', 'pl', 'pt-PT', 'pt-BR', 'ru', 'es', 'sk', 'sv', 'tr'],
     'locales_rtl'     => ['fa'],
     'default_locale'  => 'en',
 
@@ -219,6 +219,7 @@ return [
     |-------------------------------------------------------------------------
     */
     'fetch_schedule'    => env('APP_FETCH_SCHEDULE', 1),
+    'fetch_unseen'      => env('APP_FETCH_UNSEEN', 1),
 
     /*
     |--------------------------------------------------------------------------
@@ -472,6 +473,7 @@ return [
     */
     'csp_enabled'    => env('APP_CSP_ENABLED', true),
     'csp_script_src' => env('APP_CSP_SCRIPT_SRC', ''),
+    'csp_custom'     => env('APP_CSP_CUSTOM', ''),
 
     /*
     |--------------------------------------------------------------------------
@@ -479,6 +481,16 @@ return [
     |-------------------------------------------------------------------------
     */
     'cloudflare_is_used'    => env('APP_CLOUDFLARE_IS_USED', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | When this option is enabled you may see an extra text below customer's replies, for example:
+    |     On Thu, Jan 4, 2024 at 8:41 AM John Doe | Demo <test@example.org> wrote:
+    |
+    | But overall reply separation in this case is more reliable.
+    |-------------------------------------------------------------------------
+    */
+    'alternative_reply_separation'    => env('APP_ALTERNATIVE_REPLY_SEPARATION', false),
 
     /*
     |--------------------------------------------------------------------------

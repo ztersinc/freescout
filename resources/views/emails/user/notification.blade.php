@@ -22,7 +22,7 @@
 	<![endif]-->
 </head>
 <body bgcolor="#f8f9f9" style="-webkit-text-size-adjust:none; margin: 0;">
-	<table bgcolor="#f8f9f9" cellspacing="0" border="0" cellpadding="0" width="100%">
+	<table bgcolor="#f8f9f9" cellspacing="0" border="0" cellpadding="0" width="100%" id="{{ \MailHelper::REPLY_SEPARATOR_NOTIFICATION }}" class="{{ \MailHelper::REPLY_SEPARATOR_NOTIFICATION }}" data-fs="{{ \MailHelper::REPLY_SEPARATOR_NOTIFICATION }}">
 		<tr>
 			<td>
 				<table class="content" width="100%" border="0" cellspacing="0" cellpadding="0">
@@ -97,7 +97,7 @@
 							                    <td height="10" bgcolor="{{ $conversation->getStatusColor() }}" style="color:#ffffff; font-family:Arial, 'Helvetica Neue', Helvetica, Tahoma, sans-serif; line-height:12px; font-size:12px; margin-top: 3px;border-radius: 2px; {{--@if ($conversation->status == App\Conversation::STATUS_PENDING)border: 1px solid #ccc; color: #727d87;@endif--}}">{{ strtoupper($conversation->getStatusName()) }}</td>
 							                </tr>
 							            </table>
-							            @if ($conversation->user_id)
+							            @if ($conversation->user_id && $conversation->user)
 								            <table border="0" cellspacing="0" cellpadding="0">
 								                <tr>
 								                    <td style="font-family:Arial, 'Helvetica Neue', Helvetica, Tahoma, sans-serif; color:#B5B9BD; line-height:16px; font-size:12px; padding-top: 8px;text-align:right;">

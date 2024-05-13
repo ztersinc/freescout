@@ -9,8 +9,8 @@
         a { color: #346CC4; text-decoration:none; }
     </style>
 </head>
-<body style="-webkit-text-size-adjust:none;">
-	<div id="{{ App\Misc\Mail::REPLY_SEPARATOR_HTML }}" class="{{ App\Misc\Mail::REPLY_SEPARATOR_HTML }}" style="width:100%!important; margin:0; padding:0">
+<body style="-webkit-text-size-adjust:none;">@php $reply_separator = \MailHelper::getHashedReplySeparator($headers['Message-ID']); @endphp
+	<div id="{{ $reply_separator }}" class="{{ $reply_separator }}" data-fs="{{ $reply_separator }}" style="width:100%!important; margin:0; padding:0">
 	    @php
 	    	$is_forwarded = !empty($threads[0]) ? $threads[0]->isForwarded() : false;
 	    @endphp
@@ -69,7 +69,7 @@
 		@endif
 		<div style="height:0; font-size:0px; line-height:0px; color:#ffffff;">	                    	
 			@if (\App\Option::get('open_tracking'))
-				<img src="{{ route('open_tracking.set_read', ['conversation_id' => $threads->first()->conversation_id, 'thread_id' => $threads->first()->id]) }}" alt="" />
+				<img src="{{ route('open_tracking.set_read', ['conversation_id' => $threads->first()->conversation_id, 'thread_id' => $threads->first()->id, 'otr' => '1']) }}" alt="" />
 			@endif
 			<span style="font-size: 0px; line-height: 0px; color:#ffffff !important;">{{-- Extra symbols not to show message marker in Gmail snippet preview --}} &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj; &zwnj;{{-- In addition to Message-ID header to detect relies --}}{{ \MailHelper::getMessageMarker($headers['Message-ID']) }}</span>
 		</div>

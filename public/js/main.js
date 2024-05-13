@@ -656,6 +656,7 @@ function mailboxConnectionInit(out_method_smtp)
 	    $('#send-test-trigger').click(function(event) {
 	    	var button = $(this);
 	    	button.button('loading');
+	    	$('#send_test_log').addClass('hidden');
 	    	fsAjax(
 				{
 					action: 'send_test',
@@ -668,6 +669,9 @@ function mailboxConnectionInit(out_method_smtp)
 						showFloatingAlert('success', Lang.get("messages.email_sent"));
 					} else {
 						showAjaxError(response, true);
+						if (typeof(response.log) != "undefined" && response.log) {
+							$('#send_test_log').removeClass('hidden').text(response.log);
+						}
 					}
 					button.button('reset');
 				},
@@ -786,6 +790,7 @@ function mailSettingsInit()
 		$('#send-test-trigger').click(function(event) {
 	    	var button = $(this);
 	    	button.button('loading');
+	    	$('#send_test_log').addClass('hidden');
 	    	fsAjax(
 				{
 					action: 'send_test',
@@ -797,6 +802,9 @@ function mailSettingsInit()
 						showFloatingAlert('success', Lang.get("messages.email_sent"));
 					} else {
 						showAjaxError(response);
+						if (typeof(response.log) != "undefined" && response.log) {
+							$('#send_test_log').removeClass('hidden').text(response.log);
+						}
 					}
 					button.button('reset');
 				},
@@ -1422,10 +1430,11 @@ function initConversation()
 // Create new email conversation
 function switchToNewEmailConversation()
 {
+    $('.conv-switch-button').removeClass('active');
 	$('#email-conv-switch').addClass('active');
-	$('#phone-conv-switch').removeClass('active');
 	$('.email-conv-fields').show();
 	$('.phone-conv-fields').hide();
+    $('.custom-conv-fields').hide();
 	$('#field-to').show();
 	$('#name').addClass('parsley-exclude');
 	$('#to').removeClass('parsley-exclude');
@@ -1439,8 +1448,9 @@ function switchToNewEmailConversation()
 // Create new phone conversation
 function switchToNewPhoneConversation()
 {
-	$('#email-conv-switch').removeClass('active');
+    $('.conv-switch-button').removeClass('active');
 	$('#phone-conv-switch').addClass('active');
+    $('.custom-conv-fields').hide();
 	$('.email-conv-fields').hide();
 	$('.phone-conv-fields').show();
 
@@ -2016,7 +2026,7 @@ function editorSendFile(file, attach, is_conv, editor_id, container)
 
 function removeAttachment(attachment_id)
 {
-	$('.atachment-upload-'+attachment_id).remove();
+	$('.atachment-upload-'+$.escapeSelector(attachment_id)).remove();
 	//attachment.parent().parent().children(":input[value='"+attachment_id+"']");
 }
 
@@ -2355,6 +2365,12 @@ function getQueryParam(name, qs) {
 
     // Process arrays
     for (var param in params) {
+
+    	// Skip __proto__
+    	// https://github.com/freescout-helpdesk/freescout/security/advisories/GHSA-rx6j-4c33-9h3r
+    	if (param.match(/^__proto__\[/i)) {
+    		continue;
+    	}
     	
     	// Two dimentional
     	var m = param.match(/^([^\[]+)\[([^\[]+)\]$/i);
@@ -2768,7 +2784,7 @@ function loadConversations(page, table, no_loader)
 		}
 	}
 
-	if (typeof(URL) != "undefined") {
+	if (typeof(URL) != "undefined" && getGlobalAttr('folder_id')) {
 		const url = new URL(window.location);
 		url.searchParams.set('page', page);
 		window.history.replaceState({}, '', url);
@@ -3094,6 +3110,32 @@ function initMergeConv()
 					ajaxFinish();
 				}
 			);
+		});
+	});
+}
+
+// Filter conversations by Assignee
+function initConvAssigneeFilter()
+{
+	$(document).ready(function() {
+
+		$(".conv-assignee-filter:visible:first").change(function(e){
+			var user_id = $(this).val();
+			var table = $('.table-conversations:first');
+			table.attr('data-param_user_id', user_id);
+
+			if (user_id) {
+				table.children().find('.conv-owner:first').addClass('filtered');
+			} else {
+				table.children().find('.conv-owner:first').removeClass('filtered');
+			}
+
+			loadConversations();
+			closeAllModals();
+		});
+
+		$(".conv-assignee-filter-reset:visible:first").click(function(e){
+			$(".conv-assignee-filter:visible:first").val('').change();
 		});
 	});
 }
@@ -4344,7 +4386,7 @@ function showForwardForm(data, reply_block)
 	reply_block.children().find(":input[name='to']:first").addClass('hidden');
 	reply_block.children().find("#cc").val('').trigger('change');
 	reply_block.children().find("#bcc").val('').trigger('change');
-	reply_block.children().find(":input[name='to_email']:first").removeClass('hidden').removeClass('parsley-exclude').next('.select2:first').show();
+	reply_block.children().find(":input[name='to_email[]']:first").removeClass('hidden').removeClass('parsley-exclude').next('.select2:first').show();
 	reply_block.addClass('inactive');
 	reply_block.addClass('conv-forward-block');
 	$(".conv-actions .conv-reply:first").addClass('inactive');
@@ -4496,7 +4538,9 @@ function editThread(button)
 				// Hide all elements in thread container.
 				thread_container.children().hide();
 				thread_container.prepend(response.html);
-				summernoteInit(thread_container.find('.thread-editor:first'));
+				summernoteInit(thread_container.find('.thread-editor:first'), {
+					toolbar: fs_conv_editor_toolbar
+				});
 
 				thread_container.children().find('.thread-editor-cancel:first').click(function(e) {
 					cancelThreadEdit(e.target);
@@ -4771,95 +4815,108 @@ function converstationBulkActionsInit()
 			}
 		});
 
-		// Change conversation assignee
-		$(".conv-user li > a", bulk_buttons).click(function(e) {
-			if ($(this).hasClass('disabled')) {
-				return;
-			}
-
-			var user_id = $(this).data('user_id');
-
-			var conv_ids = getSelectedConversations(checkboxes);
-
-			fsAjax(
-				{
-					action: 'bulk_conversation_change_user',
-					conversation_id: conv_ids,
-					user_id: user_id
-				},
-				laroute.route('conversations.ajax'),
-				function(response) {
-					if (isAjaxSuccess(response)) {
-						location.reload();
-					} else {
-						showAjaxError(response);
-					}
-				}, true
-			);
-			e.preventDefault();
-		});
-
-		// Change conversation status
-		$(".conv-status li > a", bulk_buttons).click(function(e) {
-			var status = $(this).data('status');
-
-			var conv_ids = getSelectedConversations(checkboxes);
-
-			fsAjax(
-				{
-					action: 'bulk_conversation_change_status',
-					conversation_id: conv_ids,
-					status: status
-				},
-				laroute.route('conversations.ajax'),
-				function(response) {
-					if (isAjaxSuccess(response)) {
-						location.reload();
-					} else {
-						showAjaxError(response);
-					}
-				}, true
-			);
-			e.preventDefault();
-		});
-
-		// Delete conversation
-		$(".conv-delete", bulk_buttons).click(function(e) {
-
-			showModalDialog('#conversations-bulk-actions-delete-modal', {
-				on_show: function(modal) {
-					modal.children().find('.delete-conversation-ok:first').click(function(e) {
-						modal.modal('hide');
-
-						var conv_ids = getSelectedConversations(checkboxes);
-
-						fsAjax(
-							{
-								action: 'bulk_delete_conversation',
-								conversation_id: conv_ids,
-							},
-							laroute.route('conversations.ajax'),
-							function(response) {
-								if (isAjaxSuccess(response)) {
-									location.reload();
-								} else {
-									showAjaxError(response);
-								}
-							}, true
-						);
-						e.preventDefault();
-					});
+		if (!bulk_buttons.attr('data-initialized')) {
+			// Change conversation assignee
+			$(".conv-user li > a", bulk_buttons).click(function(e) {
+				if ($(this).hasClass('disabled')) {
+					return;
 				}
-			});
-			e.preventDefault();
-		});
 
-		$('.conv-checkbox-clear', bulk_buttons).click(function(e) {
-			$(checkboxes).trigger('change');
-			$(checkboxes).prop('checked', false);
-			$(checkboxes).trigger('change');
-			$('table.table-conversations tr').removeClass('selected');
-		});
+				var user_id = $(this).data('user_id');
+
+				// We should pass empty "checkboxes" parameter
+				// to avoid selected conversations list being empty
+				// after sorting conversations.
+				var conv_ids = getSelectedConversations();
+
+				fsAjax(
+					{
+						action: 'bulk_conversation_change_user',
+						conversation_id: conv_ids,
+						user_id: user_id
+					},
+					laroute.route('conversations.ajax'),
+					function(response) {
+						if (isAjaxSuccess(response)) {
+							location.reload();
+						} else {
+							showAjaxError(response);
+						}
+					}, true
+				);
+				e.preventDefault();
+			});
+
+			// Change conversation status
+			$(".conv-status li > a", bulk_buttons).click(function(e) {
+				var status = $(this).data('status');
+
+				// We should pass empty "checkboxes" parameter
+				// to avoid selected conversations list being empty
+				// after sorting conversations.
+				var conv_ids = getSelectedConversations();
+
+				fsAjax(
+					{
+						action: 'bulk_conversation_change_status',
+						conversation_id: conv_ids,
+						status: status
+					},
+					laroute.route('conversations.ajax'),
+					function(response) {
+						if (isAjaxSuccess(response)) {
+							location.reload();
+						} else {
+							showAjaxError(response);
+						}
+					}, true
+				);
+				e.preventDefault();
+			});
+
+			// Delete conversation
+			$(".conv-delete", bulk_buttons).click(function(e) {
+
+				showModalDialog('#conversations-bulk-actions-delete-modal', {
+					on_show: function(modal) {
+						modal.children().find('.delete-conversation-ok:first').click(function(e) {
+							modal.modal('hide');
+
+							// We should pass empty "checkboxes" parameter
+							// to avoid selected conversations list being empty
+							// after sorting conversations.
+							var conv_ids = getSelectedConversations();
+
+							fsAjax(
+								{
+									action: 'bulk_delete_conversation',
+									conversation_id: conv_ids,
+								},
+								laroute.route('conversations.ajax'),
+								function(response) {
+									if (isAjaxSuccess(response)) {
+										location.reload();
+									} else {
+										showAjaxError(response);
+									}
+								}, true
+							);
+							e.preventDefault();
+						});
+					}
+				});
+				e.preventDefault();
+			});
+
+			$('.conv-checkbox-clear', bulk_buttons).click(function(e) {
+				$(checkboxes).trigger('change');
+				$(checkboxes).prop('checked', false);
+				$(checkboxes).trigger('change');
+				$('table.table-conversations tr').removeClass('selected');
+			});
+
+			bulk_buttons.attr('data-initialized', '1');
+		}
 
 		$('.toggle-all:checkbox').on('click', function () {
 			$('.conv-checkbox:checkbox').prop('checked', this.checked).trigger('change');

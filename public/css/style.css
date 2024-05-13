@@ -600,7 +600,8 @@ select.form-control {
 .btn-danger.btn-light:hover {
     background-color: #c9302c;
 }
-.has-error.help-block {
+.has-error.help-block,
+.parsley-required {
     color: #a94442;
 }
 .has-error .form-control.parsley-exclude {
@@ -929,6 +930,7 @@ a h4 {
     padding-right: 20px;
     margin: 0;
     display: block;
+    overflow: hidden;
 }
 .dash-card .waiting-since {
     color: #93a1af;
@@ -1369,7 +1371,8 @@ thead .conv-cb label {
     display: block;
     font-weight: bold;
 }
-.table-conversations th .conv-col-sort {
+.table-conversations th .conv-col-sort,
+.table-conversations th.conv-owner span {
     cursor: pointer;
 }
 .table.table-conversations tbody td {
@@ -1553,6 +1556,9 @@ table.table-conversations td.conv-attachment {
 .table-conversations .glyphicon-earphone {
     color: #93a1af;
 }
+.table-conversations .glyphicon-comment {
+    color: #93a1af;
+}
 .table-pager {
     float: right;
 }
@@ -1577,6 +1583,14 @@ table.table-conversations td.conv-attachment {
 /*.conv-subject-number {
     display: none;
 }*/
+.conv-owner .glyphicon {
+    margin-left: 3px;
+    display: none;
+}
+.conv-owner:hover .glyphicon,
+.conv-owner.filtered .glyphicon {
+    display: inline-block;
+}
 .conv-owner-mobile {
     display: none;
     font-weight: normal;
@@ -2421,6 +2435,9 @@ button.conv-checkbox-clear {
     margin-bottom: 10px;
 }
 .phone-conv-fields {
+    display: none;
+}
+.custom-conv-fields{
     display: none;
 }
 .toggle-field {
@@ -3347,11 +3364,11 @@ ul.sidebar-block-list {
     background-color: #f9fafa;
 }
 .web-notification.is-unread a {
-    background-color: #f1faff;
+    background-color: #d5f0ff;
 }
 .web-notification.is-unread a:hover,
 .web-notification.is-unread a:focus {
-    background-color: #e7f6ff;
+    background-color: #bce7ff;
 }
 .web-notification-msg {
     line-height: 18px;
@@ -4386,6 +4403,9 @@ a.disabled:focus {
     font-size: 15px;
     padding: 4px 6px 4px 6px;
     vertical-align: inherit;
+}
+#send_test_log {
+    max-height: 200px;
 }
 .glyphicon-spin {
     -webkit-animation: spin 1000ms infinite linear;
