@@ -187,7 +187,7 @@ class CustomersController extends Controller
 
         $flash_message = __('Customer saved successfully.').' '.$flash_message;
         \Session::flash('flash_success_unescaped', $flash_message);
-        
+
         \Session::flash('customer.updated', 1);
 
         return redirect()->route('customers.update', ['id' => $id]);
@@ -227,15 +227,19 @@ class CustomersController extends Controller
     /**
      * View customer conversations.
      *
-     * @param intg $id
+     * @param int $id
+     * @param \Illuminate\Http\Request $request
      */
-    public function conversations($id)
+    public function conversations($id, Request $request)
     {
         $customer = Customer::findOrFail($id);
+        $mailbox_ids = $request->mailbox_id
+                    ? [$request->mailbox_id]
+                    : auth()->user()->mailboxesIdsCanView();
 
         $conversations = $customer->conversations()
             ->where('customer_id', $customer->id)
-            ->whereIn('mailbox_id', auth()->user()->mailboxesIdsCanView())
+            ->whereIn('mailbox_id', $mailbox_ids)
             ->orderBy('created_at', 'desc')
             ->paginate(Conversation::DEFAULT_LIST_SIZE);
 
@@ -384,7 +388,7 @@ class CustomersController extends Controller
                 }
 
                 if (!$response['msg']) {
-                   
+
                     $customer = Customer::create($request->email, $request->all());
                     if ($customer) {
                         $response['email']  = $request->email;
@@ -395,7 +399,7 @@ class CustomersController extends Controller
 
             // Conversations navigation
             case 'customers_pagination':
-            
+
                 $customers = app('App\Http\Controllers\ConversationsController')->searchCustomers($request, $user);
 
                 $response['status'] = 'success';
