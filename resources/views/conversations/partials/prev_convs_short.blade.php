@@ -19,7 +19,7 @@
                         @endforeach
                     </ul>
                     @if ($prev_conversations->hasMorePages())
-                        <a href="{{ route('customers.conversations', ['id' => $customer->id, 'mailbox_id' => $conversation->mailbox_id])}}" class="sidebar-block-link link-blue">{{ __("View all :number", ['number' => '']) }}</a>
+                        <a href="{{ route('customers.conversations', ['id' => $customer->id, 'mailbox_id' => $mailbox->id])}}" class="sidebar-block-link link-blue">{{ __("View all :number", ['number' => '']) }}</a>
                     @endif
                 </div>
             </div>
