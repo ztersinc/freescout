@@ -326,6 +326,9 @@ class Helper
         'ja' => ['name'          => '日本語',
                  'name_en'       => 'Japanese',
         ],
+        'kz' => ['name'          => 'қазақ тілі',
+                 'name_en'       => 'Kazakh',
+        ],
         'ko' => ['name'          => '한국어 (韓國語)',
                  'name_en'       => 'Korean (Johab)',
         ],
@@ -1661,7 +1664,8 @@ class Helper
 
             // 307 - Temporary Redirect.
             if (!preg_match("/(200|301|302|307)/", $headers[0])) {
-                return false;
+                throw new \Exception('HTTP Status Code: '.$headers[0], 1);
+                //return false;
             }
 
             $ch = curl_init();
@@ -1671,14 +1675,19 @@ class Helper
             curl_setopt($ch, CURLOPT_TIMEOUT, 180);
             $contents = curl_exec($ch);
 
-            if (curl_errno($ch)) {
-                throw new \Exception(curl_errno($ch).' '.curl_error($ch), 1);
+            $curl_errno = curl_errno($ch);
+
+            if ($curl_errno) {
+                throw new \Exception('Curl Error Number: '.$curl_errno, 1);
             }
 
-            curl_close($ch);
-
-            if (!$contents) {
-                return false;
+            if ($contents == '') {
+                $https_status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                throw new \Exception('Empty Response. Curl Error Number: '.$curl_errno.'. Response Status Code: '.$https_status, 1);
+                //return false;
+            } else {
+                curl_close($ch);
             }
 
             return $contents;
@@ -1732,7 +1741,7 @@ class Helper
         } elseif ($ext == 'pdf') {
             // Rename PDF to avoid running embedded JavaScript.
             if ($uploaded_file && !$contents) {
-                $contents = file_get_contents($uploaded_file->getRealPath());
+                $contents = file_get_contents($uploaded_file->getRealPath() ?: $uploaded_file->getPathname());
             }
             if ($contents && strstr($contents, '/JavaScript')) {
                 $file_name = $file_name.'_';
@@ -1969,6 +1978,11 @@ class Helper
             'proc_open (PHP)'  => function_exists('proc_open'),
             'fpassthru (PHP)'  => function_exists('fpassthru'),
             'symlink (PHP)'    => function_exists('symlink'),
+            'iconv (PHP)'      => function_exists('iconv'),
+            // If posix_isatty() function is not enabled on the server the question in the
+            // console command makes it wait infinitely and be aborted.
+            // Commands should avoid using interctive functions or use special flags.
+            //'posix_isatty (PHP)'  => function_exists('posix_isatty'),
             'pcntl_signal (console PHP)'    => function_exists('shell_exec') ? (int)\Helper::shellExec('php -r "echo (int)function_exists(\'pcntl_signal\');"') : false,
             'ps (shell)' => function_exists('shell_exec') ? \Helper::shellExec('ps') : false,
         ];
@@ -1996,7 +2010,7 @@ class Helper
         if (\Option::get('send_emails_problem')) {
             $flashes[] = [
                 'type'      => 'warning',
-                'text'      =>  __('There is a problem processing outgoing mail queue — an admin should check :%a_begin%System Status:%a_end% and :%a_begin_recommendations%Recommendations:%a_end%', ['%a_begin%' => '<a href="'.route('system').'#cron" target="_blank">', '%a_end%' => '</a>', /*'%a_begin_logs%' => '<a href="'.route('logs', ['name' => 'send_errors']).'#cron" target="_blank">',*/ '%a_begin_recommendations%' => '<a href="https://github.com/freescout-helpdesk/freescout/wiki/Background-Jobs" target="_blank">']),
+                'text'      =>  __('There is a problem processing outgoing mail queue — an admin should check :%a_begin%System Status:%a_end% and :%a_begin_recommendations%Recommendations:%a_end%', ['%a_begin%' => '<a href="'.route('system').'#cron" target="_blank">', '%a_end%' => '</a>', /*'%a_begin_logs%' => '<a href="'.route('logs', ['name' => 'send_errors']).'#cron" target="_blank">',*/ '%a_begin_recommendations%' => '<a href="'.config('app.freescout_repo').'/wiki/Background-Jobs" target="_blank">']),
                 'unescaped' => true,
             ];
         }
@@ -2101,8 +2115,8 @@ class Helper
         $nonce = \Helper::cspNonce();
 
         return "<meta http-equiv=\"Content-Security-Policy\" content=\"script-src 'self' 'nonce-".$nonce."' "
-            .config('app.csp_script_src').' '.\Eventy::filter('csp.script_src', '')."\">";
-        //<meta property=\"csp-nonce\" id=\"csp-nonce\" content=\"".$nonce."\">";
+            .config('app.csp_script_src').' '.\Eventy::filter('csp.script_src', '').";"
+            .config('app.csp_custom').\Eventy::filter('csp.custom', '')."\">";
     }
 
     public static function cspNonceAttr()

@@ -77,7 +77,7 @@ class CustomersController extends Controller
         // Photo
         $validator->after(function ($validator) use ($customer, $request) {
             if ($request->hasFile('photo_url')) {
-                $path_url = $customer->savePhoto($request->file('photo_url')->getRealPath(), $request->file('photo_url')->getMimeType());
+                $path_url = $customer->savePhoto($request->file('photo_url')->getRealPath() ?: $request->file('photo_url')->getPathname(), $request->file('photo_url')->getMimeType());
 
                 if ($path_url) {
                     $customer->photo_url = $path_url;
@@ -342,7 +342,8 @@ class CustomersController extends Controller
                 if (!empty($request->use_id)) {
                     $id = $customer->id;
                 } else {
-                    $id = $customer->getMainEmail();
+                    // https://github.com/freescout-helpdesk/freescout/issues/4057
+                    $id = $customer->email ?? $customer->getMainEmail();
                 }
             }
             $response['results'][] = [

@@ -18,7 +18,7 @@ return [
     | or any other location as required by the application or its packages.
     */
 
-    'version' => '1.8.138',
+    'version' => '1.8.153',
 
     /*
     |--------------------------------------------------------------------------
@@ -98,7 +98,7 @@ return [
     */
 
     'locale'          => env('APP_LOCALE', 'en'),
-    'locales'         => ['en', 'zh-CN', 'hr', 'cs', 'da', 'nl', 'fi', 'fr', 'de', 'it', 'ja', 'ko', 'no', 'fa', 'pl', 'pt-PT', 'pt-BR', 'ru', 'es', 'sk', 'sv', 'tr'],
+    'locales'         => ['en', 'zh-CN', 'hr', 'cs', 'da', 'nl', 'fi', 'fr', 'de', 'it', 'ja', 'kz', 'ko', 'no', 'fa', 'pl', 'pt-PT', 'pt-BR', 'ru', 'es', 'sk', 'sv', 'tr'],
     'locales_rtl'     => ['fa'],
     'default_locale'  => 'en',
 
@@ -170,10 +170,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | FreeScout eepository
+    | FreeScout repository
     |-------------------------------------------------------------------------
     */
-    'freescout_repo' => 'https://github.com/freescout-helpdesk/freescout',
+    'freescout_repo' => 'https://freescout.net/github',
 
     /*
     |--------------------------------------------------------------------------
@@ -339,6 +339,15 @@ return [
     */
     'use_mail_date_on_fetching'    => env('APP_USE_MAIL_DATE_ON_FETCHING', false),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Don't add quotes around date in the SINCE IMAP instruction on fetching.
+    | https://github.com/freescout-help-desk/freescout/issues/4175
+    |
+    |-------------------------------------------------------------------------
+    */
+    'since_without_quotes_on_fetching'    => env('APP_SINCE_WITHOUT_QUOTES_ON_FETCHING', false),
+
      /*
     |--------------------------------------------------------------------------
     | Dashboard path.
@@ -398,7 +407,7 @@ return [
     | Library used to fetch emails: webklex/laravel-imap, webklex/php-imap
     |-------------------------------------------------------------------------
     */
-    'new_fetching_library'    => env('APP_NEW_FETCHING_LIBRARY', false),
+    'new_fetching_library'    => env('APP_NEW_FETCHING_LIBRARY', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -473,6 +482,7 @@ return [
     */
     'csp_enabled'    => env('APP_CSP_ENABLED', true),
     'csp_script_src' => env('APP_CSP_SCRIPT_SRC', ''),
+    'csp_custom'     => env('APP_CSP_CUSTOM', ''),
 
     /*
     |--------------------------------------------------------------------------

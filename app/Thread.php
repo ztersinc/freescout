@@ -2,6 +2,7 @@
 
 namespace App;
 
+use App\Mailbox;
 use App\SendLog;
 use App\Events\ConversationStatusChanged;
 use App\Events\ConversationUserChanged;
@@ -820,7 +821,14 @@ class Thread extends Model
         $name = $mailbox->name;
 
         if ($mailbox->from_name == Mailbox::FROM_NAME_CUSTOM && $mailbox->from_name_custom) {
-            $name = $mailbox->from_name_custom;
+            $data = [
+                'mailbox' => $mailbox,
+                'mailbox_from_name' => '', // To avoid recursion.
+                'conversation' => $this->conversation,
+                // If we reach here it means the thread has been created by user.
+                'user' => $this->getCreatedBy(),
+            ];
+            $name = \MailHelper::replaceMailVars($mailbox->from_name_custom, $data, false, true);
         } elseif ($mailbox->from_name == Mailbox::FROM_NAME_USER && $this->getCreatedBy()) {
             $name = $this->getCreatedBy()->getFirstName(true);
         }
@@ -1407,12 +1415,22 @@ class Thread extends Model
      */
     public function fetchBody()
     {
-        $message = \MailHelper::fetchMessage($this->conversation->mailbox, $this->message_id, $this->getMailDate());
+        $mailbox = null;
+
+        // The conversation may has been moved from another mailbox.
+        if (!empty($this->conversation->meta['orig_mailbox_id'])) {
+            $mailbox = Mailbox::find($this->conversation->meta['orig_mailbox_id']);
+        }
+
+        if (!$mailbox) {
+            $mailbox = $this->conversation->mailbox;
+        }
+        $message = \MailHelper::fetchMessage($mailbox, $this->message_id, $this->getMailDate());
 
         // Try without limiting by date.
         // https://github.com/freescout-helpdesk/freescout/issues/3658
         if (!$message) {
-            $message = \MailHelper::fetchMessage($this->conversation->mailbox, $this->message_id);
+            $message = \MailHelper::fetchMessage($mailbox, $this->message_id);
         }
 
         if (!$message) {

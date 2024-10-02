@@ -229,6 +229,12 @@ class LegacyProtocol extends Protocol {
         $uids = is_array($uids) ? $uids : [$uids];
         foreach ($uids as $id) {
             $result[$id] = \imap_fetchbody($this->stream, $id, "", $uid ? IMAP::ST_UID : IMAP::NIL);
+            // imap_fetchbody() for POP3 connection returns headers and body.
+            // https://github.com/freescout-help-desk/freescout/issues/4181#issuecomment-2308142260
+            while (($pos = strpos($result[$id], "\r\n")) > 0) {
+                $result[$id] = substr($result[$id], $pos + 2);
+            }
+            $result[$id] = substr($result[$id], 0, -2);
         }
         return $result;
     }
