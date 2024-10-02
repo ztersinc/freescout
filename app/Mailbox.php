@@ -977,6 +977,19 @@ class Mailbox extends Model
         return $this->meta['oauth'][$param] ?? '';
     }
 
+    public function inOauthEnabled()
+    {
+        return $this->oauthEnabled() 
+            && $this->in_username !== null && !strstr($this->in_username, '@');
+    }
+
+    public function outOauthEnabled()
+    {
+        return $this->oauthEnabled() 
+            && $this->out_username !== null && !strstr($this->out_username, '@')
+            && $this->out_server !== null && trim($this->out_server) == \MailHelper::OAUTH_MICROSOFT_SMTP;
+    }
+
     public function setEmailAttribute($value)
     {
         if ($value) {
