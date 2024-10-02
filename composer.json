@@ -108,6 +108,7 @@
             "Illuminate\\Foundation\\": "overrides/laravel/framework/src/Illuminate/Foundation/",
             "Illuminate\\Foundation\\Testing\\": "overrides/laravel/framework/src/Illuminate/Foundation/Testing/",
             "Illuminate\\Foundation\\Http\\Middleware\\": "overrides/laravel/framework/src/Illuminate/Foundation/Http/Middleware/",
+            "Illuminate\\Foundation\\Bootstrap\\": "overrides/laravel/framework/src/Illuminate/Foundation/Bootstrap/",
             "Illuminate\\Routing\\": "overrides/laravel/framework/src/Illuminate/Routing/",
             "Illuminate\\Broadcasting\\Broadcasters\\": "overrides/laravel/framework/src/Illuminate/Broadcasting/Broadcasters/",
             "Illuminate\\Validation\\Concerns\\": "overrides/laravel/framework/src/Illuminate/Validation/Concerns/",
@@ -266,6 +267,7 @@
             "vendor/symfony/finder/Iterator/DepthRangeFilterIterator.php",
             "vendor/symfony/finder/Iterator/DateRangeFilterIterator.php",
             "vendor/symfony/console/Helper/HelperSet.php",
+            "vendor/symfony/console/Helper/Table.php",
             "vendor/maximebf/debugbar/src/DebugBar/DebugBar.php",
             "vendor/maximebf/debugbar/src/DebugBar/JavascriptRenderer.php",
             "vendor/maximebf/debugbar/src/DebugBar/DataFormatter/DataFormatter.php",
@@ -295,6 +297,7 @@
             "vendor/laravel/framework/src/Illuminate/Routing/Router.php",
             "vendor/laravel/framework/src/Illuminate/Filesystem/Filesystem.php",
             "vendor/rap2hpoutre/laravel-log-viewer/src/Rap2hpoutre/LaravelLogViewer/LaravelLogViewer.php",
+            "vendor/rap2hpoutre/laravel-log-viewer/src/controllers/LogViewerController.php",
             "vendor/symfony/console/Descriptor/TextDescriptor.php",
             "vendor/symfony/console/Helper/Helper.php",
             "vendor/symfony/finder/Iterator/SortableIterator.php",
@@ -315,7 +318,11 @@
             "vendor/webklex/php-imap/src/Message.php",
             "vendor/webklex/php-imap/src/Attachment.php",
             "vendor/webklex/php-imap/src/Part.php",
-            "vendor/webklex/php-imap/src/Connection/Protocols/ImapProtocol.php"
+            "vendor/webklex/php-imap/src/Client.php",
+            "vendor/webklex/php-imap/src/Connection/Protocols/ImapProtocol.php",
+            "vendor/webklex/php-imap/src/Connection/Protocols/LegacyProtocol.php",
+            "vendor/webklex/php-imap/src/Query/Query.php",
+            "vendor/laravel/framework/src/Illuminate/Foundation/Bootstrap/HandleExceptions.php"
         ]
     },
     "autoload-dev": {

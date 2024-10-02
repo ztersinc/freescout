@@ -35,6 +35,15 @@ class ImapProtocol extends Protocol {
     protected $noun = 0;
 
     /**
+     * Host is stored just to check which instruction to use
+     * when fetching body: BODY[TEXT] or RFC822.TEXT.
+     */
+    public $host = '';
+
+    public static $output_debug_log = true;
+    public static $debug_log = '';
+
+    /**
      * Imap constructor.
      * @param bool $cert_validation set to false to skip SSL certificate validation
      * @param mixed $encryption Connection encryption method
@@ -62,6 +71,9 @@ class ImapProtocol extends Protocol {
         $transport = 'tcp';
         $encryption = '';
 
+        // Remember host.
+        $this->host = $host;
+
         if ($this->encryption) {
             $encryption = strtolower($this->encryption);
             if (in_array($encryption, ['ssl', 'tls'])) {
@@ -79,7 +91,7 @@ class ImapProtocol extends Protocol {
                 $this->enableStartTls();
             }
         } catch (Exception $e) {
-            throw new ConnectionFailedException('connection failed', 0, $e);
+            throw new ConnectionFailedException('connection failed - '.$e->getMessage(), 0, $e);
         }
     }
 
@@ -111,8 +123,19 @@ class ImapProtocol extends Protocol {
         if ($line === "" && ($next_char === false || $next_char === "")) {
             throw new RuntimeException('empty response');
         }
-        if ($this->debug) echo "<< ".$line."\n";
+        if ($this->debug) $this->debug("<< ".$line."\n");
         return $line . "\n";
+    }
+
+    public function debug($line) {
+        if (self::$output_debug_log) {
+            echo $line;
+        }
+        self::$debug_log .= $line;
+    }
+
+    public static function getDebugLog() {
+        return self::$debug_log;
     }
 
     /**
@@ -328,7 +351,7 @@ class ImapProtocol extends Protocol {
      * @throws RuntimeException
      */
     public function write(string $data) {
-        if ($this->debug) echo ">> ".$data ."\n";
+        if ($this->debug) $this->debug(">> ".$data ."\n");
 
         if (fwrite($this->stream, $data . "\r\n") === false) {
             throw new RuntimeException('failed to write - connection closed?');
@@ -683,7 +706,15 @@ class ImapProtocol extends Protocol {
      * @throws RuntimeException
      */
     public function content($uids, string $rfc = "RFC822", $uid = IMAP::ST_UID): array {
-        $result = $this->fetch(["$rfc.TEXT"], is_array($uids)?$uids:[$uids], null, $uid);
+        // iCloud requires BODY[TEXT] instead of RFC822.TEXT.
+        // https://github.com/freescout-help-desk/freescout/issues/4202#issuecomment-2315369990
+        if (strtolower(trim($this->host)) == 'imap.mail.me.com') {
+            $item = "BODY[TEXT]";
+        } else {
+            $item = "$rfc.TEXT";
+        }
+        
+        $result = $this->fetch([$item], is_array($uids)?$uids:[$uids], null, $uid);
         return is_array($result) ? $result : [];
     }
 

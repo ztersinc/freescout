@@ -86,6 +86,11 @@ class HandleExceptions
         if ($this->app->runningInConsole()) {
             $this->renderForConsole($e);
         } else {
+            // Do not add to the output the "PHP Request Shutdown: Unexpected characters at end of address: &lt;&gt; (errflg=3)"
+            // error happening inside imap_* functions.
+            if (strstr($e->getMessage(), 'PHP Request Shutdown: Unexpected characters at end of address')) {
+                return;
+            }
             $this->renderHttpResponse($e);
         }
     }

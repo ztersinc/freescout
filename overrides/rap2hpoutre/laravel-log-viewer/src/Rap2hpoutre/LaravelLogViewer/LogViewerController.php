@@ -104,7 +104,7 @@ class LogViewerController extends BaseController
         } elseif ($this->request->has('del')) {
             app('files')->delete($this->pathFromInput('del'));
             return $this->redirect($this->request->url());
-        } elseif ($this->request->has('delall')) {
+        } elseif ($this->request->has('delall') && \Session::token() == $this->request->get('_token')) {
             $files = ($this->log_viewer->getFolderName())
                         ? $this->log_viewer->getFolderFiles(true)
                         : $this->log_viewer->getFiles(true);
