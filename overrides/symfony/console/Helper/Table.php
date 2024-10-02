@@ -418,7 +418,7 @@ class Table
 
             // Remove any new line breaks and replace it with a new line
             foreach ($rows[$rowKey] as $column => $cell) {
-                if (!strstr($cell, "\n")) {
+                if (!strstr($cell ?? '', "\n")) {
                     continue;
                 }
                 $lines = explode("\n", str_replace("\n", "<fg=default;bg=default>\n</>", $cell));

@@ -162,6 +162,8 @@ class Message {
     /** @var FlagCollection $flags */
     public $flags;
 
+    public $tmp_raw_body;
+
     /**
      * A list of all available and supported flags
      *
@@ -246,7 +248,7 @@ class Message {
      * @throws Exceptions\RuntimeException
      * @throws Exceptions\MessageNotFoundException
      */
-    public static function make(int $uid, $msglist, Client $client, string $raw_header, string $raw_body, array $raw_flags, $fetch_options = null, $sequence = null): Message {
+    public static function make(/*int*/ $uid, $msglist, Client $client, string $raw_header, string $raw_body, array $raw_flags, $fetch_options = null, $sequence = null): Message {
         $reflection = new ReflectionClass(self::class);
         /** @var self $instance */
         $instance = $reflection->newInstanceWithoutConstructor();
@@ -265,11 +267,17 @@ class Message {
         $instance->setFetchOption($fetch_options);
 
         $instance->setClient($client);
-        $instance->setSequenceId($uid, $msglist);
+        if ($uid !== null) {
+            $instance->setSequenceId($uid, $msglist);
+        }
 
         $instance->parseRawHeader($raw_header);
         $instance->parseRawFlags($raw_flags);
-        $instance->parseRawBody($raw_body);
+        // Parsing body may lead to "Allowed memory size" fatal error.
+        // https://github.com/freescout-help-desk/freescout/issues/4089
+        //$instance->parseRawBody($raw_body);
+        $instance->tmp_raw_body = $raw_body;
+
         $instance->peek();
 
         return $instance;
@@ -364,6 +372,9 @@ class Message {
      * @return mixed
      */
     public function getTextBody() {
+        if (!$this->structure) {
+            $this->parseRawBody($this->tmp_raw_body);
+        }
         if (!isset($this->bodies['text'])) {
             return null;
         }
@@ -377,6 +388,9 @@ class Message {
      * @return bool
      */
     public function hasHTMLBody(): bool {
+        if (!$this->structure) {
+            $this->parseRawBody($this->tmp_raw_body);
+        }
         return isset($this->bodies['html']) && $this->bodies['html'] !== "";
     }
 
@@ -386,6 +400,9 @@ class Message {
      * @return string|null
      */
     public function getHTMLBody() {
+        if (!$this->structure) {
+            $this->parseRawBody($this->tmp_raw_body);
+        }
         if (!isset($this->bodies['html'])) {
             return null;
         }
@@ -509,6 +526,10 @@ class Message {
         }elseif ($this->getFlags()->get("seen") != null) {
             $this->setFlag("Seen");
         }
+    }
+
+    public function markAsRead(){
+        $this->setFlag("Seen");
     }
 
     /**
@@ -722,13 +743,16 @@ class Message {
         if (strtolower($from ?? '') == 'us-ascii' && $to == 'UTF-8') {
             return $str;
         }
+        if (!$str) {
+            return $str;
+        }
 
         $result = '';
 
         if (strtolower($from) == 'iso-2022-jp'){
            $from = 'iso-2022-jp-ms';
         }
-        
+
         // Try iconv.
         if (function_exists('iconv') && $from != 'UTF-7' && $to != 'UTF-7' && $from != 'iso-2022-jp-ms') {
             try {
@@ -741,13 +765,21 @@ class Message {
         // In some cases iconv can't decode the string and returns:
         // Detected an illegal character in input string.
         // https://github.com/freescout-helpdesk/freescout/issues/3089
-        if (!$result) {
-            if (!$from) {
-                return mb_convert_encoding($str, $to);
+
+        // Use try...catch to avoid
+        // mb_convert_encoding(): Argument #3 ($from_encoding) contains invalid encoding "windows-1257"
+        // https://github.com/freescout-helpdesk/freescout/issues/4051
+        try {
+            if (!$result) {
+                if (!$from) {
+                    return mb_convert_encoding($str, $to);
+                }
+                return mb_convert_encoding($str, $to, $from);
+            } else {
+                return $result;
             }
-            return mb_convert_encoding($str, $to, $from);
-        } else {
-            return $result;
+        } catch (\Throwable $e) {
+            return $str;
         }
     }
 

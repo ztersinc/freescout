@@ -998,13 +998,18 @@ class ConversationsController extends Controller
 
                     if (!$is_note && !$is_forward) {
                         // Save extra recipients to CC
+                        $cc = Conversation::sanitizeEmails($request->cc);
                         if ($is_create && !$is_multiple && count($to_array) > 1) {
-                            $conversation->setCc(array_merge(Conversation::sanitizeEmails($request->cc), $to_array));
+                            // First recipient becomes To, others - go to CC.
+                            $remaining_to = array_diff($to_array, [$to]);
+                            $cc = array_diff($cc, [$to]);
+                            $cc = array_merge($cc, $remaining_to);
+                            $conversation->setCc($cc);
                         } else {
                             if (!$is_multiple) {
-                                $conversation->setCc(array_merge(Conversation::sanitizeEmails($request->cc), [$to]));
+                                $conversation->setCc(array_diff($cc, [$to]));
                             } else {
-                                $conversation->setCc(Conversation::sanitizeEmails($request->cc));
+                                $conversation->setCc($cc);
                             }
                         }
                         $conversation->setBcc($request->bcc);
@@ -2092,27 +2097,7 @@ class ConversationsController extends Controller
 
                     if ($conversation->state != Conversation::STATE_DELETED) {
                         // Move to Deleted folder.
-                        $conversation->state = Conversation::STATE_DELETED;
-                        $conversation->user_updated_at = date('Y-m-d H:i:s');
-                        $conversation->updateFolder();
-                        $conversation->save();
-
-                        // Create lineitem thread
-                        $thread = new Thread();
-                        $thread->conversation_id = $conversation->id;
-                        $thread->user_id = $conversation->user_id;
-                        $thread->type = Thread::TYPE_LINEITEM;
-                        $thread->state = Thread::STATE_PUBLISHED;
-                        $thread->status = Thread::STATUS_NOCHANGE;
-                        $thread->action_type = Thread::ACTION_TYPE_DELETED_TICKET;
-                        $thread->source_via = Thread::PERSON_USER;
-                        $thread->source_type = Thread::SOURCE_TYPE_WEB;
-                        $thread->customer_id = $conversation->customer_id;
-                        $thread->created_by_user_id = $user->id;
-                        $thread->save();
-
-                        // Remove conversation from drafts folder.
-                        $conversation->removeFromFolder(Folder::TYPE_DRAFTS);
+                        $conversation->deleteToFolder($user, false);
                     } else {
                         // Delete forever
                         $conversation->deleteForever();
@@ -2310,8 +2295,7 @@ class ConversationsController extends Controller
                 $subject = trim($subject);
 
                 if (!$response['msg'] && $subject) {
-                    $conversation->subject = $subject;
-                    $conversation->save();
+                    $conversation->changeSubject($subject, $user);
 
                     $response['status'] = 'success';
                 }
@@ -3230,6 +3214,10 @@ class ConversationsController extends Controller
         if ($thread->first) {
             // This was a new conversation, move it to drafts
             $conversation->state = Thread::STATE_DRAFT;
+
+            // Add a record to the conversation_folder table.
+            $conversation->addToFolder(Folder::TYPE_DRAFTS);
+
             $conversation->updateFolder();
             $conversation->mailbox->updateFoldersCounters();
             $folder_id = null;
