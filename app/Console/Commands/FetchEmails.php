@@ -132,7 +132,7 @@ class FetchEmails extends Command
             $this->extra_import = [];
 
             $debug_log = '';
-            
+
             try {
                 $debug_log = $this->executeFetch($mailbox, $debug);
             } catch (\Exception $e) {
@@ -144,7 +144,7 @@ class FetchEmails extends Command
                     $sleep += 200000;
 
                     usleep(self::MAX_SLEEP);
-                    
+
                     try {
                         $debug_log = $this->executeFetch($mailbox, $debug);
                     } catch (\Exception $e) {
@@ -195,7 +195,7 @@ class FetchEmails extends Command
         if ($debug) {
             ob_start();
         }
-        
+
         $this->fetch($mailbox);
 
         if ($debug) {
@@ -271,7 +271,7 @@ class FetchEmails extends Command
                 $last_error = '';
                 $messages = collect([]);
 
-                try {    
+                try {
                     $messages_query = $folder->query()->since(now()->subDays($this->option('days')))->leaveUnread();
                     if ($unseen) {
                         $messages_query->unseen();
@@ -345,7 +345,7 @@ class FetchEmails extends Command
             // From - $from is the plain text email.
             $from = $message->getReplyTo();
 
-            if (!$from 
+            if (!$from
                 // https://github.com/freescout-helpdesk/freescout/issues/3101
                 || !($reply_to = $this->formatEmailList($from))
                 || empty($reply_to[0])
@@ -387,11 +387,11 @@ class FetchEmails extends Command
 
             // Special hack to allow threading into conversations Jira messages.
             // https://github.com/freescout-helpdesk/freescout/issues/2927
-            // 
+            //
             // Jira does not properly populate Reference / In-Reply-To headers.
             // When Jira sends a reply the In-Reply-To header is set to:
             // JIRA.$\{issue-id}.$\{issue-created-date-millis}@$\{host}
-            // 
+            //
             // If we see the first message of a ticket we change the Message-ID,
             // so all follow-ups in the ticket are nicely threaded.
             $jira_message_id = preg_replace('/^(JIRA\.\d+\.\d+)\..*(@Atlassian.JIRA)/', '\1\2', $message_id);
@@ -589,8 +589,8 @@ class FetchEmails extends Command
 
                             // Customer replied to the email from user
                             preg_match('/^'.\MailHelper::MESSAGE_ID_PREFIX_REPLY_TO_CUSTOMER."\-(\d+)\-([a-z0-9]+)@/", $prev_message_id, $m);
-                            // Simply checking thread_id from message_id was causing an issue when 
-                            // customer was sending a message from FreeScout - the message was 
+                            // Simply checking thread_id from message_id was causing an issue when
+                            // customer was sending a message from FreeScout - the message was
                             // connected to the wrong conversation.
                             if (!empty($m[1]) && !empty($m[2])) {
                                 $message_id_hash = $m[2];
@@ -660,7 +660,7 @@ class FetchEmails extends Command
                     // Behaviour of email sent to multiple mailboxes:
                     // If a user from either mailbox replies, then a new conversation is created
                     // in the other mailbox with another new conversation ID.
-                    // 
+                    //
                     // Try to get thread by generated message ID.
                     if ($in_reply_to) {
                         $prev_thread = Thread::where('message_id', \MailHelper::generateMessageId($in_reply_to, $mailbox->id.$in_reply_to))->first();
@@ -681,7 +681,7 @@ class FetchEmails extends Command
                 // Get body and do not replace :cid with images base64
                 $html_body = $message->getHTMLBody(false);
             }
-            
+
             $is_html = true;
 
             if ($html_body) {
@@ -721,9 +721,9 @@ class FetchEmails extends Command
                 // email looking things.
                 //&& ($fwd_body = $html_body ?: $message->getTextBody())
                 && $body
-                //&& preg_match("/^(".implode('|', \MailHelper::$fwd_prefixes)."):(.*)/i", $subject, $m) 
+                //&& preg_match("/^(".implode('|', \MailHelper::$fwd_prefixes)."):(.*)/i", $subject, $m)
                 // F:, FW:, FWD:, WG:, De:
-                && preg_match("/^[[:alpha:]]{1,3}:(.*)/i", $subject, $m) 
+                && preg_match("/^[[:alpha:]]{1,3}:(.*)/i", $subject, $m)
                 // It can be just "Fwd:"
                 //&& !empty($m[1])
                 && !$user_id && !$is_reply && !$prev_thread
@@ -733,11 +733,11 @@ class FetchEmails extends Command
             ) {
                 // Try to get "From:" from body.
                 $original_sender = $this->getOriginalSenderFromFwd($body);
-                
+
                 if ($original_sender) {
                     // Check if sender is the existing user.
                     $sender_is_user = User::nonDeleted()->where('email', $from)->exists();
-                    
+
                     if ($sender_is_user) {
                         // Substitute sender.
                         $from = $original_sender;
@@ -750,7 +750,7 @@ class FetchEmails extends Command
                 }
             }
 
-            // separateReply() function may distort original HTML if email 
+            // separateReply() function may distort original HTML if email
             // is mentioned as <test@example.org> and it will interpret it as a tag.
             // https://github.com/freescout-helpdesk/freescout/issues/4036
 
@@ -758,7 +758,7 @@ class FetchEmails extends Command
 
             // Create customers
             $emails = array_merge(
-                $this->attrToArray($message->getFrom()), 
+                $this->attrToArray($message->getFrom()),
                 $this->attrToArray($message->getReplyTo()),
                 $this->attrToArray($message->getTo()),
                 $this->attrToArray($message->getCc()),
@@ -804,16 +804,16 @@ class FetchEmails extends Command
                 // We should import the message into other mailboxes even if previous thread is set.
                 // https://github.com/freescout-helpdesk/freescout/issues/3473
                 //if (!$data['prev_thread']) {
-                
+
                 // Maybe this email need to be imported also into other mailbox.
 
                 $recipient_emails = array_unique($this->formatEmailList(array_merge(
-                    $this->attrToArray($message->getTo()), 
-                    $this->attrToArray($message->getCc()), 
+                    $this->attrToArray($message->getTo()),
+                    $this->attrToArray($message->getCc()),
                     // It will always return an empty value as it's Bcc.
                     $this->attrToArray($message->getBcc())
                 )));
-                
+
                 if (count($mailboxes) && count($recipient_emails) > 1) {
                     foreach ($mailboxes as $check_mailbox) {
                         if ($check_mailbox->id == $mailbox->id) {
@@ -1010,7 +1010,7 @@ class FetchEmails extends Command
             $conversation = $prev_thread->conversation;
 
             // If reply came from another customer: change customer, add original as CC.
-            // If FreeScout will not change the customer, the reply will be shown 
+            // If FreeScout will not change the customer, the reply will be shown
             // as coming from the original customer (not the real sender) and cause confusion.
             // Below after events are fired we roll customer back.
             if ($conversation->customer_id != $customer->id) {
@@ -1111,7 +1111,7 @@ class FetchEmails extends Command
             // After attachments saved to the disk we can replace cids in body (for PLAIN and HTML body)
             $thread->body = $this->replaceCidsWithAttachmentUrls($thread->body, $saved_attachments, $conversation, $prev_has_attachments);
             $body_changed = true;
-            
+
             foreach ($saved_attachments as $saved_attachment) {
                 if (!$saved_attachment['attachment']->embedded) {
                     $thread->has_attachments = true;
@@ -1140,7 +1140,9 @@ class FetchEmails extends Command
         $conversation->save();
 
         // Update folders counters
-        $conversation->mailbox->updateFoldersCounters();
+        // 2024-11-01 - This process is heavy (even via queued jobs) so we found it works better without
+        //              In either case this counter updates occurs hourly and on demand during conversation events
+        // $conversation->mailbox->updateFoldersCounters();
 
         if ($new) {
             event(new CustomerCreatedConversation($conversation, $thread));
@@ -1456,7 +1458,7 @@ class FetchEmails extends Command
             // [name] => 2.png
             // [disposition] => inline
             // [img_src] => ...
-            // 
+            //
             // php-imap:
             // [content] => ...
             // [type] => text
@@ -1490,8 +1492,8 @@ class FetchEmails extends Command
             }
         }
 
-        if ($only_embedded_attachments 
-            && $conversation 
+        if ($only_embedded_attachments
+            && $conversation
             && $conversation->has_attachments
             && !$prev_has_attachments
         ) {
