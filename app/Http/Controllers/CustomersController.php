@@ -23,7 +23,7 @@ class CustomersController extends Controller
     /**
      * Edit customer.
      */
-    public function update($id)
+    public function update(Request $request, $id)
     {
         $customer = Customer::findOrFail($id);
 
@@ -261,6 +261,9 @@ class CustomersController extends Controller
 
         $q = $request->q;
 
+        $user = auth()->user();
+        $limited_visibility = config('app.limit_user_customer_visibility') && !$user->isAdmin();
+
         $join_emails = false;
         if ($request->search_by == 'all' || $request->search_by == 'email' || $request->exclude_email) {
             $join_emails = true;
@@ -283,22 +286,36 @@ class CustomersController extends Controller
             }
         }
 
-        if ($request->search_by == 'all' || $request->search_by == 'email') {
-            $customers_query->where('emails.email', 'like', '%'.$q.'%');
-        }
-        if ($request->exclude_email) {
-            $customers_query->where('emails.email', '<>', $request->exclude_email);
-        }
-        if ($request->search_by == 'all' || $request->search_by == 'name') {
-            $customers_query->orWhere('first_name', 'like', '%'.$q.'%')
-                ->orWhere('last_name', 'like', '%'.$q.'%');
-        }
-        if ($request->search_by == 'phone') {
-            $phone_numeric = \Helper::phoneToNumeric($q);
-            if (!$phone_numeric) {
-                $phone_numeric = $q;
+        $customers_query->where(function ($query) use ($q, $request) {
+            if ($request->search_by == 'all' || $request->search_by == 'email') {
+                $query->where('emails.email', 'like', '%'.$q.'%');
             }
-            $customers_query->where('customers.phones', 'like', '%'.$phone_numeric.'%');
+            if ($request->exclude_email) {
+                $query->where('emails.email', '<>', $request->exclude_email);
+            }
+            if ($request->exclude_id) {
+                $query->where('customers.id', '<>', $request->exclude_id);
+            }
+            if ($request->search_by == 'all' || $request->search_by == 'name') {
+                $query->orWhere('first_name', 'like', '%'.$q.'%')
+                    ->orWhere('last_name', 'like', '%'.$q.'%')
+                    ->orWhere(\Helper::isPgSql() ? \DB::raw('(first_name || \' \' || last_name)') : \DB::raw('CONCAT(first_name, " ", last_name)'), 'like', '%'.$q.'%');
+            }
+            if ($request->search_by == 'phone') {
+                $phone_numeric = \Helper::phoneToNumeric($q);
+                if (!$phone_numeric) {
+                    $phone_numeric = $q;
+                }
+                $query->where('customers.phones', 'like', '%'.$phone_numeric.'%');
+            }
+        });
+
+        if ($limited_visibility) {
+            $mailbox_ids = $user->mailboxesIdsCanView();
+            
+            $customers_query->join('conversations', 'conversations.customer_id', '=', 'customers.id');
+            $customers_query->whereIn('conversations.mailbox_id', $mailbox_ids);
+            $customers_query->groupby('customers.id');
         }
 
         $customers = $customers_query->paginate(20);
@@ -371,14 +388,21 @@ class CustomersController extends Controller
 
         switch ($request->action) {
 
-            // Change conversation user
+            // Change conversation customer.
             case 'create':
-                // First name or email must be specified
-                $validator = Validator::make($request->all(), [
+                $validator_config = [
                     'first_name' => 'required|string|max:255',
                     'last_name'  => 'nullable|string|max:255',
                     'email'      => 'required|email|unique:emails,email',
-                ]);
+                ];
+
+                $limited_visibility = config('app.limit_user_customer_visibility') && !$user->isAdmin();
+                if ($limited_visibility) {
+                    $validator_config['email'] = 'required|email';
+                }
+
+                // First name or email must be specified.
+                $validator = Validator::make($request->all(), $validator_config);
 
                 if ($validator->fails()) {
                     foreach ($validator->errors()->getMessages()as $errors) {
@@ -420,5 +444,42 @@ class CustomersController extends Controller
         }
 
         return \Response::json($response);
+    }
+
+    public function merge(Request $request, $id)
+    {
+        $customer = Customer::findOrFail($id);
+
+        // $customers = Customer::where('id', '!=', $id)
+        //     ->orderBy('first_name')
+        //     ->orderBy('last_name')
+        //     ->get();
+
+        return view('customers/merge', ['customer' => $customer]);
+    }
+
+    /**
+     * Merge handling function.
+     */
+    public function mergeSave(Request $request, $id)
+    {
+        $request->validate([
+            'customer2_id' => 'required|exists:customers,id',
+            //'keep_attributes' => 'array'
+        ]);
+
+        $customer = Customer::findOrFail($id);
+        $customer2 = Customer::find($request->customer2_id);
+
+        // Ensure customers are different
+        if ($id === $customer2->id) {
+            return redirect()->back()->with('error', __('Cannot merge the same customer'));
+        }
+
+        $customer->mergeWith($customer2/*, $request->keep_attributes ?? []*/);
+
+        \Session::flash('flash_success_floating', __('Customers merged successfully'));
+
+        return redirect()->route('customers.update', ['id' => $id]);
     }
 }
