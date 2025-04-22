@@ -5,7 +5,7 @@
 <img src="https://raw.githubusercontent.com/freescout-help-desk/freescout/master/public/img/logo-300.png" width="180" height="180" />
 <br/><br/>
 
-[![PHP version](https://freescout-helpdesk.github.io/img/badges/PHP-7.1%2B-blue.svg)](https://github.com/freescout-help-desk/freescout#requirements) [![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2Ffreescout-helpdesk%2Ffreescout&count_bg=%2379C83D&title_bg=%23555555&icon=&icon_color=%23E7E7E7&title=hits&edge_flat=false)](https://hits.seeyoufarm.com)
+[![PHP version](https://freescout-helpdesk.github.io/img/badges/PHP-7.1%2B-blue.svg)](https://github.com/freescout-help-desk/freescout#requirements)
 
 </div>
 
@@ -36,7 +36,7 @@ If you want to support the project feel free to **star this repository**. It hel
 
   * No limitations on the number of users, tickets, mailboxes, etc.
   * 100% Mobile-friendly.
-  * Multilingual: English, Chinese, Croatian, Czech, Danish, Dutch, Finnish, French, German, Italian, Japanese, Kazakh, Korean, Norwegian, Persian, Polish, Portuguese, Russian, Spanish, Slovak, Swedish, Turkish.
+  * Multilingual: English, Chinese, Croatian, Czech, Danish, Dutch, Finnish, French, German, Hungarian, Italian, Japanese, Kazakh, Korean, Norwegian, Persian, Polish, Portuguese, Russian, Spanish, Slovak, Swedish, Turkish.
   * Seamless email integration.
   * Supports modern Microsoft Exchange authentication.
   * Fully supports screen readers (for visually impaired).
@@ -69,9 +69,11 @@ Mobile apps support the same functionality and modules as the web version of you
 
 <a href="https://freescout.net/android-app/" target="_blank" rel="nofollow"><img alt="Android App" src="https://freescout-helpdesk.github.io/img/apps/android.png" width="200px" /></a> <a href="https://freescout.net/ios-app/" target="_blank" rel="nofollow"><img alt="iOS App" src="https://freescout-helpdesk.github.io/img/apps/ios.png?v=1" width="200px" /></a>
 
+[MacOS Menu Bar App](https://github.com/jonalaniz/scouter)
+
 ## Requirements
 
-FreeScout is a pure PHP/MySQL application, so it can be easily deployed even on a shared hosting.
+FreeScout is a pure PHP/MySQL application, so it can be easily deployed even on a [shared hosting](https://github.com/freescout-help-desk/freescout/wiki/Choosing-a-Server).
 
   * Nginx / Apache / IIS
   * PHP 7.1 - 8.x

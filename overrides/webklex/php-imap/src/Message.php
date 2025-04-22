@@ -74,7 +74,7 @@ class Message {
      *
      * @var Client
      */
-    private $client = Client::class;
+    private $client;
 
     /**
      * Default mask
@@ -190,7 +190,7 @@ class Message {
      * @throws MessageFlagException
      * @throws Exceptions\MessageNotFoundException
      */
-    public function __construct(int $uid, $msglist, Client $client, int $fetch_options = null, bool $fetch_body = false, bool $fetch_flags = false, int $sequence = null) {
+    public function __construct(int $uid, $msglist, Client $client, ?int $fetch_options = null, bool $fetch_body = false, bool $fetch_flags = false, ?int $sequence = null) {
         $this->boot();
 
         $default_mask = $client->getDefaultMessageMask();
@@ -282,6 +282,77 @@ class Message {
 
         return $instance;
     }
+
+   /**
+     * Create a new message instance by reading and loading a file or remote location
+     * @param string $filename
+     * @param ?Config $config
+     *
+     * @return Message
+     * @throws AuthFailedException
+     * @throws ConnectionFailedException
+     * @throws ImapBadRequestException
+     * @throws ImapServerErrorException
+     * @throws InvalidMessageDateException
+     * @throws MaskNotFoundException
+     * @throws MessageContentFetchingException
+     * @throws ReflectionException
+     * @throws ResponseException
+     * @throws RuntimeException
+     */
+    public static function fromFile(string $filename, ?Config $config = null): Message {
+        $blob = file_get_contents($filename);
+        if ($blob === false) {
+            throw new RuntimeException("Unable to read file");
+        }
+        return self::fromString($blob, $config);
+    }
+
+    /**
+     * Create a new message instance by reading and loading a string
+     * @param string $blob
+     * @param ?Config $config
+     *
+     * @return Message
+     * @throws AuthFailedException
+     * @throws ConnectionFailedException
+     * @throws ImapBadRequestException
+     * @throws ImapServerErrorException
+     * @throws InvalidMessageDateException
+     * @throws MaskNotFoundException
+     * @throws MessageContentFetchingException
+     * @throws ReflectionException
+     * @throws ResponseException
+     * @throws RuntimeException
+     */
+    public static function fromString(string $blob, ?Config $config = null): Message {
+        $reflection = new ReflectionClass(self::class);
+        /** @var Message $instance */
+        $instance = $reflection->newInstanceWithoutConstructor();
+        $instance->boot($config);
+
+        //$default_mask  = $instance->getConfig()->getMask("message");
+        $default_mask = MessageMask::class;
+        if($default_mask != ""){
+            $instance->setMask($default_mask);
+        }else{
+            throw new MaskNotFoundException("Unknown message mask provided");
+        }
+
+        if(!str_contains($blob, "\r\n")){
+            $blob = str_replace("\n", "\r\n", $blob);
+        }
+        $raw_header = substr($blob, 0, strpos($blob, "\r\n\r\n"));
+        $raw_body = substr($blob, strlen($raw_header)+4);
+
+        $instance->parseRawHeader($raw_header);
+        $instance->parseRawBody($raw_body);
+
+        $instance->setUid(0);
+
+        return $instance;
+    }
+
 
     /**
      * Boot a new instance
@@ -557,7 +628,9 @@ class Message {
      * @throws Exceptions\RuntimeException
      */
     private function fetchStructure(Structure $structure) {
-        $this->client->openFolder($this->folder_path);
+        if ($this->client) {
+            $this->client->openFolder($this->folder_path);
+        }
 
         foreach ($structure->parts as $part) {
             $this->fetchPart($part);
@@ -749,10 +822,8 @@ class Message {
 
         $result = '';
 
-        if (strtolower($from) == 'iso-2022-jp'){
-           $from = 'iso-2022-jp-ms';
-        }
-
+        $from = \MailHelper::substituteEncoding($from);
+        
         // Try iconv.
         if (function_exists('iconv') && $from != 'UTF-7' && $to != 'UTF-7' && $from != 'iso-2022-jp-ms') {
             try {
@@ -829,7 +900,7 @@ class Message {
      * @throws Exceptions\GetMessagesFailedException
      * @throws Exceptions\RuntimeException
      */
-    public function thread(Folder $sent_folder = null, MessageCollection &$thread = null, Folder $folder = null): MessageCollection {
+    public function thread(?Folder $sent_folder = null, ?MessageCollection &$thread = null, ?Folder $folder = null): MessageCollection {
         $thread = $thread ?: MessageCollection::make([]);
         $folder = $folder ?:  $this->getFolder();
         $sent_folder = $sent_folder ?: $this->client->getFolderByPath(ClientManager::get("options.common_folders.sent", "INBOX/Sent"));
@@ -1027,7 +1098,7 @@ class Message {
      * @throws MessageFlagException
      * @throws MessageHeaderFetchingException
      */
-    public function delete(bool $expunge = true, string $trash_path = null, bool $force_move = false) {
+    public function delete(bool $expunge = true, ?string $trash_path = null, bool $force_move = false) {
         $status = $this->setFlag("Deleted");
         if($force_move) {
             $trash_path = $trash_path === null ? $this->config["common_folders"]["trash"]: $trash_path;
@@ -1200,9 +1271,9 @@ class Message {
     /**
      * Get the current client
      *
-     * @return Client
+     * @return ?Client
      */
-    public function getClient(): Client {
+    public function getClient(): ?Client {
         return $this->client;
     }
 
@@ -1275,7 +1346,7 @@ class Message {
      * @param  null|Message $message
      * @return boolean
      */
-    public function is(Message $message = null): bool {
+    public function is(?Message $message = null): bool {
         if (is_null($message)) {
             return false;
         }
@@ -1428,7 +1499,7 @@ class Message {
      */
     public function setUid(int $uid): Message {
         $this->uid = $uid;
-        $this->msgn = $this->client->getConnection()->getMessageNumber($this->uid);
+        $this->msgn = null; //$this->client->getConnection()->getMessageNumber($this->uid);
         $this->msglist = null;
 
         return $this;
@@ -1443,7 +1514,7 @@ class Message {
      * @throws Exceptions\MessageNotFoundException
      * @throws Exceptions\ConnectionFailedException
      */
-    public function setMsgn(int $msgn, int $msglist = null): Message {
+    public function setMsgn(int $msgn, ?int $msglist = null): Message {
         $this->msgn = $msgn;
         $this->msglist = $msglist;
         $this->uid = $this->client->getConnection()->getUid($this->msgn);
@@ -1477,7 +1548,7 @@ class Message {
      * @throws Exceptions\ConnectionFailedException
      * @throws Exceptions\MessageNotFoundException
      */
-    public function setSequenceId($uid, int $msglist = null){
+    public function setSequenceId($uid, ?int $msglist = null){
         if ($this->getSequence() === IMAP::ST_UID) {
             $this->setUid($uid);
             $this->setMsglist($msglist);
