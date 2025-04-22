@@ -197,7 +197,7 @@ var EditorInsertVarButton = function (context) {
 
 	vars = fsApplyFilter('editor.vars', vars);
 
-	var contents = '<select class="form-control summernote-inservar" tabindex="-1">'+
+	var contents = '<select class="form-control summernote-inservar">'+
 		    '<option value="">'+Lang.get("messages.insert_var")+' ...</option>';
     for (var entity_name in vars) {
     	contents += '<optgroup label="'+Lang.get("messages."+entity_name)+'">';
@@ -747,7 +747,7 @@ function mailboxConnectionIncomingInit()
 					if (typeof(response.folders) != "undefined" && response.folders.length) {
 						for (i in response.folders) {
 							var imap_folder = response.folders[i];
-							if (select.find("option[value='"+imap_folder+"']").length) {
+							if (select.find("option[value='"+imap_folder.replaceAll("'", "\\'")+"']").length) {
 								continue;
 							}
 							options_html += '<option value="'+imap_folder+'" selected="selected">'+imap_folder+'</option>'
@@ -2073,6 +2073,10 @@ function initNewConversation(is_phone)
 		});
 		$('#phone-conv-switch').click(function() {
 			switchToNewPhoneConversation();
+		});
+		// Delete attachments
+		$('li.attachment-loaded .glyphicon-remove').click(function(e) {
+			removeAttachment($(this).attr('data-attachment-id'));
 		});
     });
 }
@@ -4620,7 +4624,8 @@ function saveThreadEdit(trigger)
 			button.button('reset');
 			if (typeof(response.status) != "undefined" && response.status == 'success') {
 				// Show new body
-				thread_container.find('.thread-body:first').html(response.body);
+				thread_container.find('.thread-body .thread-content:first').html(response.body);
+				thread_container.find('.thread-body .thread-meta:first').remove();
 				cancelThreadEdit(trigger, thread_container);
 			} else {
 				showAjaxError(response);
@@ -5710,4 +5715,36 @@ function isChatMode()
 function reloadPage()
 {
 	window.location.href = '';
+}
+
+function getLocale()
+{
+	return $('html:first').attr('lang');
+}
+
+function initMergeCustomers()
+{
+	$(document).ready(function(){
+		var input = $('#merge_customer2_id');
+		initCustomerSelector(input, {
+			placeholder: input.attr('placeholder'),
+			multiple: true,
+			maximumSelectionLength: 1,
+			ajax: {
+				url: laroute.route('customers.ajax_search'),
+				dataType: 'json',
+				delay: 250,
+				cache: true,
+				data: function (params) {
+					return {
+						q: params.term,
+						exclude_id: getGlobalAttr('customer_id'),
+						search_by: 'all',
+						use_id: true,
+						page: params.page
+					};
+				}
+			}
+		});
+	});
 }
