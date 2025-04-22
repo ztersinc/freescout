@@ -552,6 +552,8 @@ class User extends Authenticatable
                 's' => 'ss',
                 'l' => 'cccc',
                 'O' => 'xx',
+                // https://stackoverflow.com/questions/59682843/php-intldateformatter-returns-incorrect-year
+                'Y' => 'y',
             ]);
 
             // Remove dot from month name.
@@ -627,7 +629,7 @@ class User extends Authenticatable
         }
 
         if (stripos($dateForHuman, 'just') === false) {
-            return __(':date @ :time', ['date' => $dateForHuman, 'time' => $date->format('H:i')]);
+            return __(':date @ :time', ['date' => $dateForHuman, 'time' => self::dateFormat($date, 'H:i')]);
         } else {
             return $dateForHuman;
         }

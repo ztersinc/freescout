@@ -664,7 +664,7 @@ class Thread extends Model
                 }
             } elseif ($this->action_type == self::ACTION_TYPE_CUSTOMER_CHANGED) {
                 if ($conversation_number) {
-                    $did_this = __(':person changed the customer to :customer in conversation #:conversation_number', ['customer' => $this->customer->getFullName(true), 'conversation_number' => $conversation_number]);
+                    $did_this = __(':person changed the customer to :customer in conversation #:conversation_number', ['customer' => ($this->customer_cached ? $this->customer_cached->getFullName(true) : ''), 'conversation_number' => $conversation_number]);
                 } else {
                     $customer_name = '';
                     if ($this->customer_cached) {
@@ -1449,6 +1449,20 @@ class Thread extends Model
     public function parseHeaders()
     {
         return \MailHelper::parseHeaders($this->headers);
+    }
+
+    public function getHeader($header_name)
+    {
+        return getHeader($this->headers, $header_name);
+    }
+
+    public function getFromHeader()
+    {
+        if (empty($this->headers)) {
+            return '';
+        }
+        preg_match("#From:\s*.*[^\s]*\s*<\s*(.*[^\s])\s*>\s*\n#", $this->headers ?? '', $m);
+        return $m[1] ?? '';
     }
 
     public function getMailDate()

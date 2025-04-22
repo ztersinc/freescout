@@ -173,14 +173,58 @@ class Header {
      * @return string|null
      */
     public function getBoundary() {
-        $regex = $this->config["boundary"] ?? "/boundary=(.*?(?=;)|(.*))/i";
-        $boundary = $this->find($regex);
+        $boundary = '';
+
+        // Finding boundary via regex is not 100% reliable as boundary
+        // may be mentioned in other headers.
+        if (is_object($this->boundary)) {
+            $values = $this->boundary->get();
+            if (!empty($values[0])) {
+                $boundary = $values[0];
+            }
+        }
+
+        if (!$boundary) {
+            // Regex-based boundary extraction
+            $regex = $this->config["boundary"] ?? "/boundary=(.*?(?=;)|(.*))/i";
+            $boundary = $this->find($regex);
+        }
+
+        if ($boundary) {
+            $boundary = $this->decodeBoundary($boundary);
+        }
 
         if ($boundary === null) {
             return null;
         }
 
         return $this->clearBoundaryString($boundary);
+    }
+
+    /**
+     * // Decode the boundary if necessary (RFC 2231 encoding)
+     * https://github.com/freescout-help-desk/freescout/issues/4567
+     *
+     * @return string|null
+     */
+    protected function decodeBoundary($boundary) {
+        
+        if (strpos($boundary, "'") !== false) {
+            $parts = explode("'", $boundary, 3);
+            if (count($parts) === 3) {
+                $charset = $parts[0] ?? 'us-ascii';
+                $language = $parts[1] ?? '';
+                $encodedValue = $parts[2] ?? '';
+                $boundary = rawurldecode($encodedValue);
+
+                // Convert charset if necessary
+                if (function_exists('mb_convert_encoding') && strtolower($charset) !== 'utf-8') {
+                    $boundary = mb_convert_encoding($boundary, 'UTF-8', $charset);
+                }
+            }
+        }
+
+        return $boundary;
     }
 
     /**
@@ -199,7 +243,7 @@ class Header {
      * @throws InvalidMessageDateException
      */
     protected function parse() {
-        $header = $this->rfc822_parse_headers($this->raw);
+        $header = self::rfc822_parse_headers($this->raw);
 
         $this->extractAddresses($header);
 
@@ -234,14 +278,15 @@ class Header {
      *
      * @return object
      */
-    public function rfc822_parse_headers($raw_headers) {
+    public static function rfc822_parse_headers($raw_headers) {
         $headers = [];
         $imap_headers = [];
-        if (extension_loaded('imap') && $this->config["rfc822"]) {
+        // Consider rfc822 option to be always 'true'.
+        if (extension_loaded('imap') /*&& isset($this->config) && $this->config["rfc822"]*/) {
             $raw_imap_headers = (array)\imap_rfc822_parse_headers($raw_headers);
             foreach ($raw_imap_headers as $key => $values) {
                 $key = str_replace("-", "_", $key);
-                $values = $this->sanitizeHeaderValue($values);
+                $values = self::sanitizeHeaderValue($values);
                 if (!is_array($values) || (is_array($values) && count($values))) {
                     $imap_headers[$key] = $values;
                 }
@@ -299,7 +344,7 @@ class Header {
                 case 'bcc':
                 case 'reply_to':
                 case 'sender':
-                    $value = $this->decodeAddresses($values);
+                    $value = self::decodeAddresses($values);
                     $headers[$key . "address"] = implode(", ", $values);
                     break;
                 case 'subject':
@@ -325,7 +370,7 @@ class Header {
                     }
                     break;
             }
-            $value = $this->sanitizeHeaderValue($value);
+            $value = self::sanitizeHeaderValue($value);
             if (!is_array($value) || (is_array($value) && count($value))) {
                 $headers[$key] = $value;
             } elseif (is_array($value) && !count($value) && isset($headers[$key])) {
@@ -337,7 +382,7 @@ class Header {
     }
 
     // https://github.com/freescout-help-desk/freescout/issues/4158
-    public function sanitizeHeaderValue($value)
+    public static function sanitizeHeaderValue($value)
     {
         if (is_array($value)) {
             foreach ($value as $i => $v) {
@@ -367,7 +412,7 @@ class Header {
     public function mime_header_decode(string $text): array {
 
         // imap_mime_header_decode() can't decode some headers: =?iso-2022-jp?B?...?=
-        if (\Str::startsWith($text, '=?iso-2022-jp?')) {
+        if (\Helper::startsiWith($text, '=?iso-2022-jp?')) {
             return [(object)[
                 "charset" => 'iso-2022-jp',
                 "text"    => \MailHelper::decodeSubject($text)
@@ -431,9 +476,7 @@ class Header {
             return $str;
         }
 
-        if (strtolower($from) == 'iso-2022-jp'){
-           $from = 'iso-2022-jp-ms';
-        }
+        $from = \MailHelper::substituteEncoding($from);
 
         try {
             if (function_exists('iconv') && $from != 'UTF-7' && $to != 'UTF-7') {
@@ -583,10 +626,11 @@ class Header {
      *
      * @return array
      */
-    private function decodeAddresses($values): array {
+    private static function decodeAddresses($values): array {
         $addresses = [];
 
-        if (extension_loaded('mailparse') && $this->config["rfc822"]) {
+        // Consider rfc822 option to be always 'true'.
+        if (extension_loaded('mailparse') /*&& $this->config["rfc822"]*/) {
             foreach ($values as $address) {
                 foreach (\mailparse_rfc822_parse_addresses($address) as $parsed_address) {
                     if (isset($parsed_address['address'])) {
@@ -606,7 +650,7 @@ class Header {
         }
 
         foreach ($values as $address) {
-            foreach (preg_split('/, (?=(?:[^"]*"[^"]*")*[^"]*$)/', $address) as $split_address) {
+            foreach (preg_split('/, ?(?=(?:[^"]*"[^"]*")*[^"]*$)/', $address) as $split_address) {
                 $split_address = trim(rtrim($split_address));
 
                 if (strpos($split_address, ",") == strlen($split_address) - 1) {
@@ -654,7 +698,36 @@ class Header {
         $addresses = [];
 
         if (is_array($list) === false) {
-            return $addresses;
+            // https://github.com/Webklex/php-imap/commit/916e273d102c6e4b8f10363a500d8caa6ab94111
+            if (is_string($list)) {
+                // $list = "<noreply@github.com>"
+                if (preg_match(
+                    '/^(?:(?P<name>.+)\s)?(?(name)<|<?)(?P<email>[^\s]+?)(?(name)>|>?)$/',
+                    $list,
+                    $matches
+                )) {
+                    $name = trim(rtrim($matches["name"]));
+                    $email = trim(rtrim($matches["email"]));
+                    list($mailbox, $host) = array_pad(explode("@", $email), 2, null);
+                    if ($mailbox === ">") { // Fix trailing ">" in malformed mailboxes
+                        $mailbox = "";
+                    }
+                    if ($name === "" && $mailbox === "" && $host === "") {
+                        return $addresses;
+                    }
+                    $list = [
+                        (object)[
+                            "personal" => $name,
+                            "mailbox"  => $mailbox,
+                            "host"     => $host,
+                        ]
+                    ];
+                } else {
+                    return $addresses;
+                }
+            } else {
+                return $addresses;
+            }
         }
 
         foreach ($list as $item) {
@@ -669,18 +742,38 @@ class Header {
             if (!property_exists($address, 'personal')) {
                 $address->personal = false;
             } else {
-                $personalParts = $this->mime_header_decode($address->personal);
+                // $personalParts = $this->mime_header_decode($address->personal);
 
-                if (is_array($personalParts)) {
-                    $address->personal = '';
-                    foreach ($personalParts as $p) {
-                        $address->personal .= $this->convertEncoding($p->text, $this->getEncoding($p));
+                // if (is_array($personalParts)) {
+                //     $address->personal = '';
+                //     foreach ($personalParts as $p) {
+                //         $address->personal .= $this->convertEncoding($p->text, $this->getEncoding($p));
+                //     }
+                // }
+
+                // if (strpos($address->personal, "'") === 0) {
+                //     $address->personal = str_replace("'", "", $address->personal);
+                // }
+
+                $personal_slices = explode(" ", $address->personal);
+                $address->personal = "";
+                foreach ($personal_slices as $slice) {
+                    $personalParts = $this->mime_header_decode($slice);
+
+                    if (is_array($personalParts)) {
+                        $personal = '';
+                        foreach ($personalParts as $p) {
+                            $personal .= $this->convertEncoding($p->text, $this->getEncoding($p));
+                        }
                     }
-                }
 
-                if (strpos($address->personal, "'") === 0) {
-                    $address->personal = str_replace("'", "", $address->personal);
+                    if (\Str::startsWith($personal, "'")) {
+                        $personal = str_replace("'", "", $personal);
+                    }
+                    $personal = \MailHelper::decodeSubject($personal);
+                    $address->personal .= $personal . " ";
                 }
+                $address->personal = trim(rtrim($address->personal));
             }
 
             $address->mail = ($address->mailbox && $address->host) ? $address->mailbox . '@' . $address->host : false;
@@ -704,63 +797,101 @@ class Header {
             }
             // Only parse strings and don't parse any attributes like the user-agent
             // https://github.com/Webklex/php-imap/issues/401
-            if (($key == "user_agent") === false && ($key == "subject") === false) {
-                if (($pos = strpos($value, ";")) !== false) {
-                    $original = substr($value, 0, $pos);
-                    $this->set($key, trim(rtrim($original)), true);
-
-                    // Get all potential extensions
-                    $extensions = explode(";", substr($value, $pos + 1));
-
-                    $previousKey = null;
-                    $previousValue = '';
-
-                    foreach ($extensions as $extension) {
-                        if (($pos = strpos($extension, "=")) !== false) {
-                            $key = substr($extension, 0, $pos);
-                            $key = trim(rtrim(strtolower($key)));
-
-                            $matches = [];
-
-                            if (preg_match('/^(?P<key_name>\w+)\*/', $key, $matches) !== 0) {
-                                $key = $matches['key_name'];
-                                $previousKey = $key;
-
-                                $value = substr($extension, $pos + 1);
-                                $value = str_replace('"', "", $value);
-                                $previousValue .= trim(rtrim($value));
-
-                                continue;
+            // https://github.com/Webklex/php-imap/commit/e5ad66267382f319f385131cefe5336692a54486
+           if (!in_array($key, ["user-agent", "subject", "received"])) {
+                if (str_contains($value, ";") && str_contains($value, "=")) {
+                    $_attributes = $this->read_attribute($value);
+                    foreach($_attributes as $_key => $_value) {
+                        if ($_value === "") {
+                            // Remove existing value.
+                            if (isset($this->attributes[$key])) {
+                                unset($this->attributes[$key]);
                             }
-
-                            if (
-                                $previousKey !== null
-                                && $previousKey !== $key
-                                && isset($this->attributes[$previousKey]) === false
-                            ) {
-                                $this->set($previousKey, $previousValue);
-
-                                $previousValue = '';
-                            }
-
-                            if (isset($this->attributes[$key]) === false) {
-                                $value = substr($extension, $pos + 1);
-                                $value = str_replace('"', "", $value);
-                                $value = trim(rtrim($value));
-
-                                $this->set($key, $value);
-                            }
-
-                            $previousKey = $key;
+                            // Set value.
+                            $this->set($key, $_key);
                         }
-                    }
-
-                    if ($previousValue !== '') {
-                        $this->set($previousKey, $previousValue);
+                        if (!isset($this->attributes[$_key])) {
+                            $this->set($_key, $_value);
+                        }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Read a given attribute string
+     * - this isn't pretty, but it works - feel free to improve :)
+     * @param string $raw_attribute
+     * @return array
+     */
+    private function read_attribute(string $raw_attribute): array {
+        $attributes = [];
+        $key = '';
+        $value = '';
+        $inside_word = false;
+        $inside_key = true;
+        $escaped = false;
+        foreach (str_split($raw_attribute) as $char) {
+            if($escaped) {
+                $escaped = false;
+                continue;
+            }
+            if($inside_word) {
+                if($char === '\\') {
+                    $escaped = true;
+                }elseif($char === "\"" && $value !== "") {
+                    $inside_word = false;
+                }else{
+                    $value .= $char;
+                }
+            }else{
+                if($inside_key) {
+                    if($char === '"') {
+                        $inside_word = true;
+                    }elseif($char === ';'){
+                        $attributes[$key] = $value;
+                        $key = '';
+                        $value = '';
+                        $inside_key = true;
+                    }elseif($char === '=') {
+                        $inside_key = false;
+                    }else{
+                        $key .= $char;
+                    }
+                }else{
+                    if($char === '"' && $value === "") {
+                        $inside_word = true;
+                    }elseif($char === ';'){
+                        $attributes[$key] = $value;
+                        $key = '';
+                        $value = '';
+                        $inside_key = true;
+                    }else{
+                        $value .= $char;
+                    }
+                }
+            }
+        }
+        $attributes[$key] = $value;
+        $result = [];
+
+        foreach($attributes as $key => $value) {
+            if (($pos = strpos($key, "*")) !== false) {
+                $key = substr($key, 0, $pos);
+            }
+            $key = trim(rtrim(strtolower($key)));
+
+            if(!isset($result[$key])) {
+                $result[$key] = "";
+            }
+            $value = trim(rtrim(str_replace(["\r", "\n"], "", $value)));
+            if (\Str::startsWith($value, "\"") && \Str::endsWith($value, "\"")) {
+                $value = substr($value, 1, -1);
+            }
+            $result[$key] .= $value;
+        }
+        return $result;
     }
 
     /**
@@ -787,90 +918,101 @@ class Header {
         if (property_exists($header, 'date')) {
             $date = $header->date;
 
-            if (preg_match('/\+0580/', $date)) {
-                $date = str_replace('+0580', '+0530', $date);
-            }
-
-            $date = trim(rtrim($date));
             try {
-                if(strpos($date, '&nbsp;') !== false){
-                    $date = str_replace('&nbsp;', ' ', $date);
-                }
-                if (str_contains($date, ' UT ')) {
-                    $date = str_replace(' UT ', ' UTC ', $date);
-                }
-                $parsed_date = Carbon::parse($date);
+                $parsed_date = self::doParseDate($date);
             } catch (\Exception $e) {
-                switch (true) {
-                    case preg_match('/([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\-[0-9]{1,2}\.[0-9]{1,2}.[0-9]{1,2})+$/i', $date) > 0:
-                        $date = Carbon::createFromFormat("Y.m.d-H.i.s", $date);
-                        break;
-                    case preg_match('/([0-9]{2} [A-Z]{3} [0-9]{4} [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [+-][0-9]{1,4} [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [+-][0-9]{1,4})+$/i', $date) > 0:
-                        $parts = explode(' ', $date);
-                        array_splice($parts, -2);
-                        $date = implode(' ', $parts);
-                        break;
-                    case preg_match('/([A-Z]{2,4}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})+$/i', $date) > 0:
-                        $array = explode(',', $date);
-                        array_shift($array);
-                        $date = Carbon::createFromFormat("d M Y H:i:s O", trim(implode(',', $array)));
-                        break;
-                    case preg_match('/([0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ UT)+$/i', $date) > 0:
-                    case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ UT)+$/i', $date) > 0:
-                        $date .= 'C';
-                        break;
-                    case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}[\,]\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})+$/i', $date) > 0:
-                        $date = str_replace(',', '', $date);
-                        break;
-                    // match case for: Di., 15 Feb. 2022 06:52:44 +0100 (MEZ)/Di., 15 Feb. 2022 06:52:44 +0100 (MEZ)
-                    case preg_match('/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \([A-Z]{3,4}\))\/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \([A-Z]{3,4}\))+$/i', $date) > 0:
-                        $dates = explode('/', $date);
-                        $date = array_shift($dates);
-                        $array = explode(',', $date);
-                        array_shift($array);
-                        $date = trim(implode(',', $array));
-                        $array = explode(' ', $date);
-                        array_pop($array);
-                        $date = trim(implode(' ', $array));
-                        $date = Carbon::createFromFormat("d M. Y H:i:s O", $date);
-                        break;
-                    // match case for: fr., 25 nov. 2022 06:27:14 +0100/fr., 25 nov. 2022 06:27:14 +0100
-                    case preg_match('/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})\/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})+$/i', $date) > 0:
-                        $dates = explode('/', $date);
-                        $date = array_shift($dates);
-                        $array = explode(',', $date);
-                        array_shift($array);
-                        $date = trim(implode(',', $array));
-                        $date = Carbon::createFromFormat("d M. Y H:i:s O", $date);
-                        break;
-                    case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ \+[0-9]{2,4}\ \(\+[0-9]{1,2}\))+$/i', $date) > 0:
-                    case preg_match('/([A-Z]{2,3}[\,|\ \,]\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}.*)+$/i', $date) > 0:
-                    case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \(.*)\)+$/i', $date) > 0:
-                    case preg_match('/([A-Z]{2,3}\, \ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \(.*)\)+$/i', $date) > 0:
-                    case preg_match('/([0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{2,4}\ [0-9]{2}\:[0-9]{2}\:[0-9]{2}\ [A-Z]{2}\ \-[0-9]{2}\:[0-9]{2}\ \([A-Z]{2,3}\ \-[0-9]{2}:[0-9]{2}\))+$/i', $date) > 0:
-                        $array = explode('(', $date);
-                        $array = array_reverse($array);
-                        $date = trim(array_pop($array));
-                        break;
-                }
-                try {
-                    $parsed_date = Carbon::parse($date);
-                } catch (\Exception $_e) {
-                    if (!isset($this->config["fallback_date"])) {
-                        // Simply use current date.
-                        // https://github.com/freescout-help-desk/freescout/issues/4159
-                        $parsed_date = Carbon::now();
-                        \Helper::logException(new InvalidMessageDateException("Invalid message date. ID:" . $this->get("message_id") . " Date:" . $header->date . "/" . $date, 1100, $e));
+                if (!isset($this->config["fallback_date"])) {
+                    // Simply use current date.
+                    // https://github.com/freescout-help-desk/freescout/issues/4159
+                    $parsed_date = Carbon::now();
+                    \Helper::logException(new InvalidMessageDateException("Invalid message date. ID:" . $this->get("message_id") . " Date:" . $header->date . "/" . $date, 1100, $e));
 
-                        //throw new InvalidMessageDateException("Invalid message date. ID:" . $this->get("message_id") . " Date:" . $header->date . "/" . $date, 1100, $e);
-                    } else {
-                        $parsed_date = Carbon::parse($this->config["fallback_date"]);
-                    }
+                    //throw new InvalidMessageDateException("Invalid message date. ID:" . $this->get("message_id") . " Date:" . $header->date . "/" . $date, 1100, $e);
+                } else {
+                    $parsed_date = Carbon::parse($this->config["fallback_date"]);
                 }
             }
 
             $this->set("date", $parsed_date);
         }
+    }
+
+    public static function doParseDate($date)
+    {
+        if (preg_match('/\+0580/', $date)) {
+            $date = str_replace('+0580', '+0530', $date);
+        }
+
+        $date = trim(rtrim($date));
+        try {
+            if(strpos($date, '&nbsp;') !== false){
+                $date = str_replace('&nbsp;', ' ', $date);
+            }
+            if (str_contains($date, ' UT ')) {
+                $date = str_replace(' UT ', ' UTC ', $date);
+            }
+            $parsed_date = Carbon::parse($date);
+        } catch (\Exception $e) {
+            switch (true) {
+                case preg_match('/([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}\-[0-9]{1,2}\.[0-9]{1,2}.[0-9]{1,2})+$/i', $date) > 0:
+                    $date = Carbon::createFromFormat("Y.m.d-H.i.s", $date);
+                    break;
+                case preg_match('/([0-9]{2} [A-Z]{3} [0-9]{4} [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [+-][0-9]{1,4} [0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2} [+-][0-9]{1,4})+$/i', $date) > 0:
+                    $parts = explode(' ', $date);
+                    array_splice($parts, -2);
+                    $date = implode(' ', $parts);
+                    break;
+                case preg_match('/([A-Z]{2,4}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})+$/i', $date) > 0:
+                    $array = explode(',', $date);
+                    array_shift($array);
+                    $date = Carbon::createFromFormat("d M Y H:i:s O", trim(implode(',', $array)));
+                    break;
+                case preg_match('/([0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ UT)+$/i', $date) > 0:
+                case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ ([0-9]{2}|[0-9]{4})\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ UT)+$/i', $date) > 0:
+                    $date .= 'C';
+                    break;
+                case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}[\,]\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})+$/i', $date) > 0:
+                    $date = str_replace(',', '', $date);
+                    break;
+                // match case for: Di., 15 Feb. 2022 06:52:44 +0100 (MEZ)/Di., 15 Feb. 2022 06:52:44 +0100 (MEZ)
+                case preg_match('/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \([A-Z]{3,4}\))\/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \([A-Z]{3,4}\))+$/i', $date) > 0:
+                    $dates = explode('/', $date);
+                    $date = array_shift($dates);
+                    $array = explode(',', $date);
+                    array_shift($array);
+                    $date = trim(implode(',', $array));
+                    $array = explode(' ', $date);
+                    array_pop($array);
+                    $date = trim(implode(' ', $array));
+                    $date = Carbon::createFromFormat("d M. Y H:i:s O", $date);
+                    break;
+                // match case for: fr., 25 nov. 2022 06:27:14 +0100/fr., 25 nov. 2022 06:27:14 +0100
+                case preg_match('/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})\/([A-Z]{2,3}\.\,\ [0-9]{1,2}\ [A-Z]{2,3}\.\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4})+$/i', $date) > 0:
+                    $dates = explode('/', $date);
+                    $date = array_shift($dates);
+                    $array = explode(',', $date);
+                    array_shift($array);
+                    $date = trim(implode(',', $array));
+                    $date = Carbon::createFromFormat("d M. Y H:i:s O", $date);
+                    break;
+                case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ \+[0-9]{2,4}\ \(\+[0-9]{1,2}\))+$/i', $date) > 0:
+                case preg_match('/([A-Z]{2,3}[\,|\ \,]\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}.*)+$/i', $date) > 0:
+                case preg_match('/([A-Z]{2,3}\,\ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \(.*)\)+$/i', $date) > 0:
+                case preg_match('/([A-Z]{2,3}\, \ [0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{4}\ [0-9]{1,2}\:[0-9]{1,2}\:[0-9]{1,2}\ [\-|\+][0-9]{4}\ \(.*)\)+$/i', $date) > 0:
+                case preg_match('/([0-9]{1,2}\ [A-Z]{2,3}\ [0-9]{2,4}\ [0-9]{2}\:[0-9]{2}\:[0-9]{2}\ [A-Z]{2}\ \-[0-9]{2}\:[0-9]{2}\ \([A-Z]{2,3}\ \-[0-9]{2}:[0-9]{2}\))+$/i', $date) > 0:
+                    $array = explode('(', $date);
+                    $array = array_reverse($array);
+                    $date = trim(array_pop($array));
+                    break;
+            }
+            try {
+                $parsed_date = Carbon::parse($date);
+            } catch (\Exception $_e) {
+                throw $_e;
+            }
+        }
+
+        return $parsed_date;
     }
 
     /**
