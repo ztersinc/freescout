@@ -18,7 +18,7 @@ return [
     | or any other location as required by the application or its packages.
     */
 
-    'version' => '1.8.154',
+    'version' => '1.8.174',
 
     /*
     |--------------------------------------------------------------------------
@@ -98,7 +98,7 @@ return [
     */
 
     'locale'          => env('APP_LOCALE', 'en'),
-    'locales'         => ['en', 'zh-CN', 'hr', 'cs', 'da', 'nl', 'fi', 'fr', 'de', 'it', 'ja', 'kz', 'ko', 'no', 'fa', 'pl', 'pt-PT', 'pt-BR', 'ru', 'es', 'sk', 'sv', 'tr'],
+    'locales'         => ['en', 'zh-CN', 'hr', 'cs', 'da', 'nl', 'fi', 'fr', 'de', 'hu', 'it', 'ja', 'kz', 'ko', 'no', 'fa', 'pl', 'pt-PT', 'pt-BR', 'ru', 'es', 'sk', 'sv', 'tr'],
     'locales_rtl'     => ['fa'],
     'default_locale'  => 'en',
 
@@ -289,7 +289,7 @@ return [
     |
     |-------------------------------------------------------------------------
     */
-    'no_retry_mail_errors'    => env('APP_NO_RETRY_MAIL_ERRORS', '(no valid recipients|does not comply with RFC|message file too big)'),
+    'no_retry_mail_errors'    => env('APP_NO_RETRY_MAIL_ERRORS', '(no valid recipients|does not comply with RFC|message file too big|malformed address)'),
 
     /*
     |--------------------------------------------------------------------------
@@ -348,6 +348,17 @@ return [
     */
     'since_without_quotes_on_fetching'    => env('APP_SINCE_WITHOUT_QUOTES_ON_FETCHING', false),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Emails are fetched in bunches. The larger the bunch's size the more chances
+    | to face "Allowed memory size exhausted" error. The smaller its size the more
+    | connections are made to the mail server and the more time fetching takes.
+    | https://github.com/freescout-help-desk/freescout/issues/4343
+    |
+    |-------------------------------------------------------------------------
+    */
+    'fetching_bunch_size'    => env('APP_FETCHING_BUNCH_SIZE', 100),
+
      /*
     |--------------------------------------------------------------------------
     | Dashboard path.
@@ -404,13 +415,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Library used to fetch emails: webklex/laravel-imap, webklex/php-imap
-    |-------------------------------------------------------------------------
-    */
-    'new_fetching_library'    => env('APP_NEW_FETCHING_LIBRARY', true),
-
-    /*
-    |--------------------------------------------------------------------------
     | Timeout for curl and GuzzleHttp.
     |-------------------------------------------------------------------------
     */
@@ -464,6 +468,14 @@ return [
     |-------------------------------------------------------------------------
     */
     'show_only_assigned_conversations'    => env('APP_SHOW_ONLY_ASSIGNED_CONVERSATIONS', ''),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Limit non-admin users to only see customers with conversations
+    | in mailboxes they are assigned to. This option does not affect admin users.
+    |-------------------------------------------------------------------------
+    */
+    'limit_user_customer_visibility'    => env('APP_LIMIT_USER_CUSTOMER_VISIBILITY', false),
 
     /*
     |--------------------------------------------------------------------------

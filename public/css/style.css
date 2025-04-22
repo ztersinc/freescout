@@ -1003,6 +1003,17 @@ a h4 {
 .summernote-inservar {
     max-width: 200px;
 }
+/* 
+This is needed to avoid an issue with the SPAN tag being added
+https://github.com/freescout-help-desk/freescout/issues/4354
+*/
+.note-editor .note-editable span,
+.note-editor .note-editable div {
+    /*background-color: inherit;*/
+    font-size: inherit;
+    /* https://github.com/freescout-help-desk/freescout/issues/4367 */
+    /*font-weight: inherit;*/
+}
 .note-editor.note-frame {
     border-color: #dee4e9 !important;
 }
@@ -3106,6 +3117,11 @@ ul.sidebar-block-list {
     width: 100%;
     height: calc(100vh - 151px);
 }
+.modal.link-dialog.fade {
+    -webkit-transition: none !important;
+    -o-transition: none !important;
+    transition: none !important;
+}
 @media (max-width:767px) {
     .modal-iframe {
         height: calc(100vh - 112px);
@@ -3165,7 +3181,8 @@ ul.sidebar-block-list {
     top: -2px;
 }
 .onoffswitch-checkbox {
-    display: none;
+    position: absolute;
+    left:-9999px;
 }
 .onoffswitch-label {
     display: block; overflow: hidden; cursor: pointer;
