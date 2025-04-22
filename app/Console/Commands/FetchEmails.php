@@ -18,7 +18,7 @@ use App\Subscription;
 use App\Thread;
 use App\User;
 use Illuminate\Console\Command;
-use Webklex\IMAP\Client;
+//use Webklex\IMAP\Client;
 
 class FetchEmails extends Command
 {
@@ -141,7 +141,7 @@ class FetchEmails extends Command
                 // we increase connection sleep time and retry after sleep.
                 // https://github.com/freescout-help-desk/freescout/issues/4227
                 if (trim($e->getMessage()) == 'connection setup failed') {
-                    $sleep += 200000;
+                    $sleep += 500000;
 
                     usleep(self::MAX_SLEEP);
 
@@ -240,7 +240,7 @@ class FetchEmails extends Command
                 $folder = \MailHelper::getImapFolder($client, $folder_name);
             } catch (\Exception $e) {
                 // Just log error and continue.
-                $this->error('['.date('Y-m-d H:i:s').'] IMAP folder not found on the mail server: '.$folder_name);
+                $this->error('['.date('Y-m-d H:i:s').'] IMAP folder ('.$folder_name.') not found on the mail server: '.$e->getMessage());
             }
 
             if ($folder) {
@@ -260,6 +260,7 @@ class FetchEmails extends Command
             $this->line('['.date('Y-m-d H:i:s').'] Fetching: '.($unseen ? 'UNREAD' : 'ALL'));
         }
 
+        $page_size = (int)config('app.fetching_bunch_size');
         foreach ($folders as $folder) {
             $this->line('['.date('Y-m-d H:i:s').'] Folder: '.($folder->full_name ?? $folder->name));
 
@@ -279,7 +280,7 @@ class FetchEmails extends Command
                     if ($no_charset) {
                         $messages_query->setCharset(null);
                     }
-                    $messages_query->limit(self::PAGE_SIZE, $page);
+                    $messages_query->limit($page_size, $page);
 
                     $messages = $messages_query->get();
 
@@ -287,7 +288,7 @@ class FetchEmails extends Command
                         $last_error = $client->getLastError();
                     }
                 } catch (\Exception $e) {
-                    $last_error = $e->getMessage();
+                    $last_error = $e->getMessage().'; File: '.$e->getFile().' ('.$e->getLine().')'.')';
                 }
 
                 if ($last_error && stristr($last_error, 'The specified charset is not supported')) {
@@ -332,7 +333,7 @@ class FetchEmails extends Command
                     $this->processMessage($message, $message_id, $dest_mailbox, $this->mailboxes);
                 }
                 $page++;
-            } while (count($messages) == self::PAGE_SIZE);
+            } while (count($messages) == $page_size);
         }
 
         $client->disconnect();
@@ -716,11 +717,13 @@ class FetchEmails extends Command
 
             // If existing user forwarded customer's email to the mailbox
             // we are creating a new conversation as if it was sent by the customer.
-            if ($in_reply_to
+            if (// Some mail clients to not add "In-Reply-To" header when forwarding emails.
+                // https://github.com/freescout-help-desk/freescout/issues/4348
+                //$in_reply_to
                 // We should use body here, as entire HTML may contain
                 // email looking things.
                 //&& ($fwd_body = $html_body ?: $message->getTextBody())
-                && $body
+                $body
                 //&& preg_match("/^(".implode('|', \MailHelper::$fwd_prefixes)."):(.*)/i", $subject, $m)
                 // F:, FW:, FWD:, WG:, De:
                 && preg_match("/^[[:alpha:]]{1,3}:(.*)/i", $subject, $m)
@@ -729,7 +732,8 @@ class FetchEmails extends Command
                 && !$user_id && !$is_reply && !$prev_thread
                 // Only if the email has been sent to one mailbox.
                 && count($to) == 1 && count($cc) == 0
-                && preg_match("/^[\s]*".self::FWD_AS_CUSTOMER_COMMAND."/su", strtolower(trim(strip_tags($body))))
+                // We need to replace also any potential <style></style> tags.
+                && preg_match("/^[\s]*".self::FWD_AS_CUSTOMER_COMMAND."/su", strtolower(trim(\Helper::stripTags($body))))
             ) {
                 // Try to get "From:" from body.
                 $original_sender = $this->getOriginalSenderFromFwd($body);
@@ -1326,7 +1330,7 @@ class FetchEmails extends Command
         // Fix for Webklex/laravel-imap.
         // https://github.com/freescout-helpdesk/freescout/issues/2782
         if (\Str::startsWith($name, '=?')) {
-            $name_decoded = \imap_utf8($name);
+            $name_decoded = \MailHelper::imapUtf8($name);
 
             if ($name_decoded) {
                 return $name_decoded;
@@ -1357,6 +1361,17 @@ class FetchEmails extends Command
 
         if ($is_html) {
             // Extract body content from HTML
+
+            // Proton has it's own unique way of placing replies:
+            // https://github.com/freescout-help-desk/freescout/issues/4537#issuecomment-2629836738
+            if ($is_reply
+                && ($protonmail_quote_pos = mb_strpos($body, '<div class="protonmail_quote">'))
+                && ($html_pos = mb_strpos($body, '<html'))
+                && $protonmail_quote_pos < $html_pos
+            ) {
+                $body = mb_substr($body, 0, $protonmail_quote_pos);
+            }
+
             // Split by <html>
             $htmls = [];
             preg_match_all("/<html[^>]*>(.*?)<\/html>/is", $body, $htmls);
@@ -1370,7 +1385,7 @@ class FetchEmails extends Command
                 libxml_use_internal_errors(true);
                 //$dom->loadHTML(mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
                 //$dom->loadHTML(\Helper::mbConvertEncodingHtmlEntities($html));
-                $dom->loadHTML(\Symfony\Polyfill\Mbstring\Mbstring::mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8'));
+                $dom->loadHTML(\Symfony\Polyfill\Mbstring\Mbstring::mb_convert_encoding($html, 'HTML-ENTITIES', 'UTF-8') ?: $html);
                 libxml_use_internal_errors(false);
                 $bodies = $dom->getElementsByTagName('body');
                 if ($bodies->length == 1) {
@@ -1616,7 +1631,8 @@ class FetchEmails extends Command
 
     public function setSeen($message, $mailbox)
     {
-        $message->setFlag(['Seen']);
+        $flag = \Eventy::filter('fetch_emails.set_seen_flag', ['Seen'], $message, $mailbox);
+        $message->setFlag($flag);
         \Eventy::action('fetch_emails.after_set_seen', $message, $mailbox, $this);
     }
 }

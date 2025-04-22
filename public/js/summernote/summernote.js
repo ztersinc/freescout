@@ -72,15 +72,15 @@ var renderer = {
 
 var editor = renderer.create('<div class="note-editor note-frame panel"/>');
 var toolbar = renderer.create('<div class="note-toolbar-wrapper panel-default"><div class="note-toolbar panel-heading"></div></div>');
-var editingArea = renderer.create('<div class="note-editing-area"/>');
-var codable = renderer.create('<textarea class="note-codable"/>');
-var editable = renderer.create('<div class="note-editable" dir="auto" contentEditable="true"/>');
+var editingArea = renderer.create('<div class="note-editing-area"></div>');
+var codable = renderer.create('<textarea class="note-codable"></textarea>');
+var editable = renderer.create('<div class="note-editable" dir="auto" contentEditable="true"></div>');
 var statusbar = renderer.create([
     '<div class="note-statusbar">',
     '  <div class="note-resizebar">',
-    '    <div class="note-icon-bar"/>',
-    '    <div class="note-icon-bar"/>',
-    '    <div class="note-icon-bar"/>',
+    '    <div class="note-icon-bar"></div>',
+    '    <div class="note-icon-bar"></div>',
+    '    <div class="note-icon-bar"></div>',
     '  </div>',
     '</div>'
 ].join(''));
@@ -1610,6 +1610,7 @@ var dom = {
     /** @property {String} blank */
     blank: blankHTML,
     /** @property {String} emptyPara */
+    // Freescout uses div instead of p to searate paragraphs
     //emptyPara: "<p>" + blankHTML + "</p>",
     emptyPara: "<div>" + blankHTML + "</div>",
     makePredByNodeName: makePredByNodeName,
@@ -2352,7 +2353,9 @@ var WrappedRange = /** @class */ (function () {
         inlineSiblings = inlineSiblings.concat(dom.listNext(topAncestor.nextSibling, dom.isParaInline));
         // wrap with paragraph
         if (inlineSiblings.length) {
-            var para = dom.wrap(lists.head(inlineSiblings), 'p');
+            // Freescout uses div instead of p to searate paragraphs
+            //var para = dom.wrap(lists.head(inlineSiblings), 'p');
+            var para = dom.wrap(lists.head(inlineSiblings), 'div');
             dom.appendChildNodes(para, lists.tail(inlineSiblings));
         }
         return this.normalize();
@@ -3066,7 +3069,9 @@ var Bullet = /** @class */ (function () {
             // LI to P
             if (isEscapseToBody || !dom.isList(headList.parentNode)) {
                 paras = paras.map(function (para) {
-                    return dom.replace(para, 'P');
+                    // Freescout uses div instead of p to searate paragraphs
+                    //return dom.replace(para, 'P');
+                    return dom.replace(para, 'DIV');
                 });
             }
             $$1.each(lists.from(paras).reverse(), function (idx, para) {
@@ -3149,7 +3154,9 @@ var Typing = /** @class */ (function () {
                 });
                 // replace empty heading, pre or custom-made styleTag with P tag
                 if ((dom.isHeading(nextPara) || dom.isPre(nextPara) || dom.isCustomStyleTag(nextPara)) && dom.isEmpty(nextPara)) {
-                    nextPara = dom.replace(nextPara, 'p');
+                    // Freescout uses div instead of p to searate paragraphs
+                    //nextPara = dom.replace(nextPara, 'p');
+                    nextPara = dom.replace(nextPara, 'div');
                 }
             }
             // no paragraph: insert empty paragraph
@@ -3984,9 +3991,6 @@ var Editor = /** @class */ (function () {
         // bind custom events
         this.$editable.on('keydown', function (event) {
             if (event.keyCode === key.code.ENTER) {
-                // freescout
-                // https://github.com/summernote/summernote/issues/546#issuecomment-341518461
-                event.shiftKey = true;
                 _this.context.triggerEvent('enter', event);
             }
             _this.context.triggerEvent('keydown', event);
@@ -4329,7 +4333,9 @@ var Editor = /** @class */ (function () {
         }
     };
     Editor.prototype.formatPara = function () {
-        this.formatBlock('P');
+        // Freescout uses div instead of p to searate paragraphs
+        //this.formatBlock('P');
+        this.formatBlock('DIV');
     };
     Editor.prototype.fontStyling = function (target, value) {
         var rng = this.createRange();
@@ -5426,9 +5432,9 @@ var Buttons = /** @class */ (function () {
                     className: 'note-table',
                     items: [
                         '<div class="note-dimension-picker">',
-                        '  <div class="note-dimension-picker-mousecatcher" data-event="insertTable" data-value="1x1"/>',
-                        '  <div class="note-dimension-picker-highlighted"/>',
-                        '  <div class="note-dimension-picker-unhighlighted"/>',
+                        '  <div class="note-dimension-picker-mousecatcher" data-event="insertTable" data-value="1x1"></div>',
+                        '  <div class="note-dimension-picker-highlighted"></div>',
+                        '  <div class="note-dimension-picker-unhighlighted"></div>',
                         '</div>',
                         '<div class="note-dimension-display">1 x 1</div>'
                     ].join('')
@@ -5914,7 +5920,7 @@ var LinkDialog = /** @class */ (function () {
             '</div>',
             '<div class="form-group note-form-group">',
             "<label class=\"note-form-label\">" + this.lang.link.url + "</label>",
-            '<input class="note-link-url form-control note-form-control note-input" type="text" value="http://" />',
+            '<input class="note-link-url form-control note-form-control note-input" type="text" value="" />',
             '</div>',
             !this.options.disableLinkTarget
                 ? $$1('<div/>').append(this.ui.checkbox({
@@ -5968,8 +5974,12 @@ var LinkDialog = /** @class */ (function () {
             _this.ui.onDialogShown(_this.$dialog, function () {
                 _this.context.triggerEvent('dialog.shown');
                 // if no url was given, copy text to url
-                if (!linkInfo.url) {
+                /*if (!linkInfo.url) {
                     linkInfo.url = linkInfo.text;
+                }*/
+                // If no url was given and given text is valid URL then copy that into URL Field
+                if (!linkInfo.url && _this.isValidUrl(linkInfo.text)) {
+                    linkInfo.url = _this.checkLinkUrl(linkInfo.text);
                 }
                 $linkText.val(linkInfo.text);
                 var handleLinkTextUpdate = function () {
@@ -6023,6 +6033,20 @@ var LinkDialog = /** @class */ (function () {
             });
             _this.ui.showDialog(_this.$dialog);
         }).promise();
+    };
+    LinkDialog.prototype.isValidUrl = function (url) {
+        const expression = /[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/gi;
+        return expression.test(url);
+    };
+    LinkDialog.prototype.checkLinkUrl = function (linkUrl) {
+        if (/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(linkUrl)) {
+            return 'mailto://' + linkUrl;
+        } else if (/^(\+?\d{1,3}[\s-]?)?(\d{1,4})[\s-]?(\d{1,4})[\s-]?(\d{1,4})$/.test(linkUrl)) {
+            return 'tel://' + linkUrl;
+        } else if (!/^([A-Za-z][A-Za-z0-9+-.]*\:|#|\/)/.test(linkUrl)) {
+            return 'http://' + linkUrl;
+        }
+        return linkUrl;
     };
     /**
      * @param {Object} layoutInfo
@@ -7215,9 +7239,7 @@ $$1.summernote = $$1.extend($$1.summernote, {
         },
         keyMap: {
             pc: {
-                // freescout
-                // https://github.com/summernote/summernote/issues/546#issuecomment-341518461
-                //'ENTER': 'insertParagraph',
+                'ENTER': 'insertParagraph',
                 'CTRL+Z': 'undo',
                 'CTRL+Y': 'redo',
                 'TAB': 'tab',
@@ -7246,9 +7268,7 @@ $$1.summernote = $$1.extend($$1.summernote, {
                 'CTRL+K': 'linkDialog.show'
             },
             mac: {
-                // freescout
-                // https://github.com/summernote/summernote/issues/546#issuecomment-341518461
-                //'ENTER': 'insertParagraph',
+                'ENTER': 'insertParagraph',
                 'CMD+Z': 'undo',
                 'CMD+SHIFT+Z': 'redo',
                 'TAB': 'tab',

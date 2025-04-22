@@ -1310,6 +1310,9 @@ class ConversationsController extends Controller
                             // Reload the conversation, otherwise Thread observer will be 
                             // increasing threads_count for the first conversation.
                             $thread_copy->load('conversation');
+
+                            \Eventy::action('thread.before_save_from_request', $thread_copy, $request);
+
                             $thread_copy->push();
 
                             // Copy attachments.
@@ -2563,9 +2566,11 @@ class ConversationsController extends Controller
             abort(403);
         }
 
+        $mailboxes = \Eventy::filter( 'conversations.move_conv.mailboxes', $user->mailboxesCanView() );
+
         return view('conversations/ajax_html/move_conv', [
             'conversation' => $conversation,
-            'mailboxes'    => $user->mailboxesCanView(),
+            'mailboxes'    => $mailboxes,
         ]);
     }
 
@@ -2991,6 +2996,8 @@ class ConversationsController extends Controller
      */
     public function searchCustomers($request, $user)
     {
+        $limited_visibility = config('app.limit_user_customer_visibility') && !$user->isAdmin();
+
         // Get IDs of mailboxes to which user has access
         $mailbox_ids = $user->mailboxesIdsCanView();
 
@@ -3017,6 +3024,7 @@ class ConversationsController extends Controller
 
                 $query->where('customers.first_name', $like_op, $like)
                     ->orWhere('customers.last_name', $like_op, $like)
+                    ->orWhere(\Helper::isPgSql() ? \DB::raw('(customers.first_name || \' \' || customers.last_name)') : \DB::raw('CONCAT(customers.first_name, " ", customers.last_name)'), $like_op, $like)
                     ->orWhere('customers.company', $like_op, $like)
                     ->orWhere('customers.job_title', $like_op, $like)
                     ->orWhere('customers.websites', $like_op, $like)
@@ -3040,6 +3048,12 @@ class ConversationsController extends Controller
                 //$join->on('conversations.mailbox_id', '=', $filters['mailbox']);
             });
             $query_customers->where('conversations.mailbox_id', '=', $filters['mailbox']);
+        } elseif ($limited_visibility) {
+            // Force only mailboxes the user has access to.
+            $query_customers->join('conversations', function ($join) use ($filters) {
+                $join->on('conversations.customer_id', '=', 'customers.id');
+            });
+            $query_customers->whereIn('conversations.mailbox_id', $mailbox_ids);
         }
 
         $query_customers = \Eventy::filter('search.customers.apply_filters', $query_customers, $filters, $q);
@@ -3261,7 +3275,9 @@ class ConversationsController extends Controller
             if (!empty($name_parts[1])) {
                 $customer_data['last_name'] = $name_parts[1];
             }
-            $customer_data['phones'] = [$request_phone];
+            if ($request_phone) {
+                $customer_data['phones'] = [$request_phone];
+            }
         }
 
         // Check if name field contains ID of the customer.
