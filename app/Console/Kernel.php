@@ -57,6 +57,9 @@ class Kernel extends ConsoleKernel
         $schedule->command('freescout:update-folder-counters')
             ->hourly();
 
+        $schedule->command('freescout:delete-folder-counter-jobs')
+            ->everyMinute();
+
         $app_key = config('app.key');
         if ($app_key) {
             $crc = crc32($app_key);
